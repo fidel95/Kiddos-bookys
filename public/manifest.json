@@ -1,0 +1,12 @@
+{
+  "name": "Kiddos Bookys",
+  "short_name": "Kiddos Bookys",
+  "description": "Made-up bilingual storybooks, read aloud in English and Spanish.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff8ec",
+  "theme_color": "#ffb703",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

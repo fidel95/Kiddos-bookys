@@ -1,0 +1,20 @@
+<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="300" fill="#1d1146"/>
+  <circle cx="60" cy="50" r="2" fill="#fff"/>
+  <circle cx="120" cy="90" r="2" fill="#fff"/>
+  <circle cx="200" cy="40" r="2" fill="#fff"/>
+  <circle cx="330" cy="70" r="2" fill="#fff"/>
+  <circle cx="360" cy="150" r="2" fill="#fff"/>
+  <circle cx="40" cy="180" r="2" fill="#fff"/>
+  <circle cx="90" cy="230" r="55" fill="#f6c453"/>
+  <circle cx="70" cy="215" r="8" fill="#d99c2b"/>
+  <circle cx="110" cy="250" r="6" fill="#d99c2b"/>
+  <g transform="translate(230,120) rotate(25)">
+    <ellipse cx="0" cy="0" rx="22" ry="55" fill="#e8e8f0"/>
+    <polygon points="0,-55 -16,-20 16,-20" fill="#e05263"/>
+    <circle cx="0" cy="-10" r="9" fill="#4aa8ff"/>
+    <polygon points="-22,20 -30,45 -10,30" fill="#e05263"/>
+    <polygon points="22,20 30,45 10,30" fill="#e05263"/>
+    <polygon points="-8,55 0,75 8,55" fill="#f6c453"/>
+  </g>
+</svg>

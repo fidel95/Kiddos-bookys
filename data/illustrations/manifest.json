@@ -1,0 +1,12 @@
+[
+  { "id": "forest", "file": "forest.svg", "tags": ["forest", "woods", "trees", "fox", "owl", "deer"] },
+  { "id": "animals", "file": "animals.svg", "tags": ["animals", "animal", "farm", "puppy", "kitten", "bunny", "rabbit"] },
+  { "id": "space", "file": "space.svg", "tags": ["space", "rocket", "stars", "moon", "planet", "astronaut", "galaxy"] },
+  { "id": "ocean", "file": "ocean.svg", "tags": ["ocean", "sea", "fish", "whale", "beach", "underwater", "mermaid"] },
+  { "id": "dinosaurs", "file": "dinosaurs.svg", "tags": ["dinosaur", "dinosaurs", "dino", "jungle", "prehistoric"] },
+  { "id": "vehicles", "file": "vehicles.svg", "tags": ["car", "truck", "train", "vehicle", "vehicles", "airplane", "road"] },
+  { "id": "magic", "file": "magic.svg", "tags": ["magic", "fantasy", "dragon", "castle", "wizard", "fairy", "unicorn"] },
+  { "id": "night", "file": "night.svg", "tags": ["night", "sleep", "dream", "bedtime", "stars", "moon"] },
+  { "id": "adventure", "file": "adventure.svg", "tags": ["adventure", "mountain", "explore", "map", "journey"] },
+  { "id": "generic", "file": "generic.svg", "tags": [] }
+]
