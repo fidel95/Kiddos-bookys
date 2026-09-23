@@ -1,16 +1,29 @@
 <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
-  <rect width="400" height="300" fill="#141936"/>
-  <circle cx="300" cy="70" r="40" fill="#f4f1de"/>
-  <circle cx="285" cy="60" r="6" fill="#e1ddc0"/>
-  <circle cx="310" cy="85" r="4" fill="#e1ddc0"/>
-  <circle cx="60" cy="50" r="2" fill="#fff"/>
-  <circle cx="110" cy="90" r="2" fill="#fff"/>
-  <circle cx="180" cy="40" r="2" fill="#fff"/>
-  <circle cx="150" cy="120" r="2" fill="#fff"/>
-  <circle cx="40" cy="140" r="2" fill="#fff"/>
-  <rect y="230" width="400" height="70" fill="#232a52"/>
-  <ellipse cx="180" cy="250" rx="60" ry="18" fill="#3a4172"/>
-  <rect x="150" y="215" width="60" height="30" rx="8" fill="#6b7ec2"/>
-  <circle cx="170" cy="228" r="4" fill="#141936"/>
-  <circle cx="190" cy="228" r="4" fill="#141936"/>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d1542"/><stop offset="1" stop-color="#4a5aa8"/></linearGradient>
+    <radialGradient id="moonglow"><stop offset="0.5" stop-color="#fff6c8" stop-opacity="0.5"/><stop offset="1" stop-color="#fff6c8" stop-opacity="0"/></radialGradient>
+    <radialGradient id="fly"><stop offset="0" stop-color="#fff27a"/><stop offset="1" stop-color="#fff27a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#sky)"/>
+  <g fill="#fff"><circle cx="30" cy="30" r="1.8"/><circle cx="90" cy="60" r="1.4"/><circle cx="150" cy="20" r="2"/><circle cx="200" cy="70" r="1.2"/><circle cx="250" cy="30" r="1.6"/><circle cx="60" cy="110" r="1.4"/><circle cx="170" cy="110" r="1.3"/><circle cx="370" cy="130" r="1.6"/></g>
+  <g fill="#ffe066"><path d="M120 50 l3 7 7 1 -5 5 1 7 -6 -3 -6 3 1 -7 -5 -5 7 -1z"/><path d="M230 100 l2 5 5 1 -4 3 1 5 -4 -2 -4 2 1 -5 -4 -3 5 -1z"/></g>
+  <circle cx="320" cy="70" r="60" fill="url(#moonglow)"/><circle cx="320" cy="70" r="34" fill="#fff6c8"/><circle cx="332" cy="58" r="6" fill="#e9dc9c"/><circle cx="308" cy="86" r="4" fill="#e9dc9c"/>
+  <path d="M302 70 q6 6 12 0 M324 70 q6 6 12 0" stroke="#7a6a3a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M0 220 Q120 180 240 214 T400 206 V300 H0Z" fill="#3f7a64"/>
+  <g transform="translate(40 150)">
+    <rect x="0" y="30" width="70" height="56" fill="#ffe0b5"/><polygon points="-8,32 35,-6 78,32" fill="#ff6b6b"/><rect x="12" y="44" width="16" height="16" fill="#fff3a0"/><rect x="42" y="44" width="16" height="16" fill="#fff3a0"/><rect x="28" y="64" width="14" height="22" fill="#8b5a34"/>
+  </g>
+  <g fill="#2f7a55"><polygon points="350,120 326,190 374,190"/><polygon points="350,146 320,226 380,226"/><polygon points="140,160 124,210 156,210"/></g>
+  <rect y="248" width="400" height="52" fill="#34695a"/>
+  <g transform="translate(220 250)">
+    <ellipse cx="0" cy="14" rx="34" ry="6" fill="#000" opacity="0.15"/>
+    <path d="M-30 -46 L-24 -70 L-12 -54Z M30 -46 L24 -70 L12 -54Z" fill="#9a6a44"/>
+    <ellipse cx="0" cy="-26" rx="34" ry="42" fill="#9a6a44"/><ellipse cx="0" cy="-12" rx="22" ry="26" fill="#f1d6a8"/>
+    <ellipse cx="-34" cy="-20" rx="10" ry="24" fill="#7d5234"/><ellipse cx="34" cy="-20" rx="10" ry="24" fill="#7d5234"/>
+    <circle cx="-13" cy="-44" r="13" fill="#f1d6a8"/><circle cx="13" cy="-44" r="13" fill="#f1d6a8"/>
+    <circle cx="-13" cy="-44" r="9" fill="#fff"/><circle cx="13" cy="-44" r="9" fill="#fff"/><circle cx="-12" cy="-43" r="6" fill="#2b1b12"/><circle cx="14" cy="-43" r="6" fill="#2b1b12"/><circle cx="-10" cy="-46" r="2" fill="#fff"/><circle cx="16" cy="-46" r="2" fill="#fff"/>
+    <polygon points="-5,-32 5,-32 0,-22" fill="#ffa62b"/>
+    <path d="M-14 16 v-6 M-8 16 v-6 M8 16 v-6 M14 16 v-6" stroke="#ffa62b" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g><circle cx="110" cy="200" r="9" fill="url(#fly)"/><circle cx="300" cy="220" r="9" fill="url(#fly)"/><circle cx="170" cy="240" r="7" fill="url(#fly)"/><circle cx="360" cy="250" r="8" fill="url(#fly)"/></g>
 </svg>
