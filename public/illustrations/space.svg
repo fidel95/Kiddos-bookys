@@ -1,20 +1,24 @@
 <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
-  <rect width="400" height="300" fill="#1d1146"/>
-  <circle cx="60" cy="50" r="2" fill="#fff"/>
-  <circle cx="120" cy="90" r="2" fill="#fff"/>
-  <circle cx="200" cy="40" r="2" fill="#fff"/>
-  <circle cx="330" cy="70" r="2" fill="#fff"/>
-  <circle cx="360" cy="150" r="2" fill="#fff"/>
-  <circle cx="40" cy="180" r="2" fill="#fff"/>
-  <circle cx="90" cy="230" r="55" fill="#f6c453"/>
-  <circle cx="70" cy="215" r="8" fill="#d99c2b"/>
-  <circle cx="110" cy="250" r="6" fill="#d99c2b"/>
-  <g transform="translate(230,120) rotate(25)">
-    <ellipse cx="0" cy="0" rx="22" ry="55" fill="#e8e8f0"/>
-    <polygon points="0,-55 -16,-20 16,-20" fill="#e05263"/>
-    <circle cx="0" cy="-10" r="9" fill="#4aa8ff"/>
-    <polygon points="-22,20 -30,45 -10,30" fill="#e05263"/>
-    <polygon points="22,20 30,45 10,30" fill="#e05263"/>
-    <polygon points="-8,55 0,75 8,55" fill="#f6c453"/>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b0a2a"/><stop offset="1" stop-color="#3a2a82"/></linearGradient>
+    <linearGradient id="moon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d6d0f2"/><stop offset="1" stop-color="#a79fd6"/></linearGradient>
+    <radialGradient id="flame" cy="0.2"><stop offset="0" stop-color="#fff3a0"/><stop offset="1" stop-color="#ff8a3d"/></radialGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#sky)"/>
+  <g fill="#fff"><circle cx="30" cy="30" r="1.8"/><circle cx="90" cy="70" r="1.4"/><circle cx="150" cy="24" r="2"/><circle cx="210" cy="60" r="1.2"/><circle cx="260" cy="20" r="1.6"/><circle cx="370" cy="90" r="1.8"/><circle cx="330" cy="140" r="1.3"/><circle cx="60" cy="130" r="1.5"/><circle cx="120" cy="150" r="1.2"/><circle cx="240" cy="110" r="1.4"/></g>
+  <g fill="#ffe066"><path d="M190 90 l3 7 7 1 -5 5 1 7 -6 -3 -6 3 1 -7 -5 -5 7 -1z"/><path d="M40 190 l2 5 5 1 -4 3 1 5 -4 -2 -4 2 1 -5 -4 -3 5 -1z"/></g>
+  <circle cx="320" cy="60" r="30" fill="#ff9e6b"/><ellipse cx="320" cy="60" rx="52" ry="12" fill="none" stroke="#fff3c4" stroke-width="5" transform="rotate(-18 320 60)"/><circle cx="310" cy="52" r="6" fill="#ffb58c"/>
+  <circle cx="70" cy="70" r="14" fill="#6ec6ff"/><circle cx="66" cy="66" r="4" fill="#9be7ff"/>
+  <path d="M0 230 Q200 190 400 230 V300 H0Z" fill="url(#moon)"/>
+  <g fill="#8a82b0"><ellipse cx="70" cy="258" rx="30" ry="8"/><ellipse cx="330" cy="264" rx="36" ry="9"/><ellipse cx="260" cy="232" rx="16" ry="4"/></g>
+  <g fill="#ff9ce6"><polygon points="350,240 356,216 362,240"/><polygon points="362,240 368,224 374,240"/><polygon points="36,236 42,214 48,236"/></g>
+  <g transform="translate(200 150) rotate(12)">
+    <path d="M-8 64 Q0 108 8 64Z" fill="url(#flame)"/>
+    <path d="M-22 40 L-40 70 L-18 62Z" fill="#ff5d5d"/><path d="M22 40 L40 70 L18 62Z" fill="#ff5d5d"/>
+    <rect x="-22" y="-30" width="44" height="96" rx="20" fill="#f6f4ff"/>
+    <path d="M-22 -18 Q0 -80 22 -18Z" fill="#ff5d5d"/>
+    <rect x="-22" y="52" width="44" height="12" fill="#ff5d5d"/>
+    <circle cx="0" cy="10" r="14" fill="#b8c1d9"/><circle cx="0" cy="10" r="10" fill="#7fd6ff"/>
+    <circle cx="-4" cy="8" r="2.6" fill="#2b1b12"/><circle cx="4" cy="8" r="2.6" fill="#2b1b12"/><path d="M-4 14 Q0 17 4 14" stroke="#2b1b12" stroke-width="1.6" fill="none" stroke-linecap="round"/>
   </g>
 </svg>

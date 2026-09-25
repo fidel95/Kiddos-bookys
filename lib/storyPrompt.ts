@@ -8,7 +8,7 @@ export const BilingualSchema = z.object({
 
 export const GeneratedPageSchema = z.object({
   sentences: z.array(BilingualSchema).min(1).max(4),
-  sceneTags: z.array(z.string()).min(1).max(5),
+  sceneTags: z.array(z.string()).min(1).max(8),
 });
 
 export const GeneratedStorySchema = z.object({
@@ -54,7 +54,7 @@ Hard rules, no exceptions:
 - Be culturally respectful and inclusive.
 - Write ${profile.pageCount} pages, with ${profile.sentenceGuidance}.
 - Every single sentence must be provided in BOTH English ("en") and Spanish ("es"), and the two must be faithful, natural translations of each other — not just two different sentences on the same topic. This bilingual pairing is the entire point of the story, so translation quality matters as much as story quality.
-- For each page, include 2 to 5 short lowercase "sceneTags" in English describing what to illustrate (e.g. "fox", "forest", "night", "stars") — not a prose description, just simple tags.
+- For each page, include 3 to 8 short lowercase "sceneTags" in English describing what to illustrate — not a prose description, just simple one-word tags. Cover: the setting (e.g. "forest", "ocean", "space", "farm", "castle"), every character on the page (e.g. "fox", "owl", "dragon"), the time of day or weather when it matters (e.g. "morning", "sunset", "night", "rain", "snow"), any key object or place (e.g. "pond", "campfire", "treasure", "bridge", "cake", "treehouse") and what the characters are doing (e.g. "sleep", "dance", "run", "wave"). Vary these from page to page so each picture is different.
 - Give the story a title in both English and Spanish.`;
 }
 
