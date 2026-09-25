@@ -1,11 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useEffectEvent, useRef, useState, type TouchEvent } from "react";
+import { Fragment, useEffect, useEffectEvent, useMemo, useRef, useState, type TouchEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Language, Story } from "@/types/story";
 import { tokenizeWords } from "@/lib/words";
 import { cancelSpeech, pauseSpeech, resumeSpeech, speakSentence } from "@/lib/tts";
-import { matchIllustration } from "@/lib/matchIllustration";
+import { planStory } from "@/lib/scene3d/director";
 import { getStoryById, markLastRead, saveStory, toggleFavorite } from "@/lib/storyStorage";
 import NarrationControls from "@/components/NarrationControls";
 import LanguageToggle from "@/components/LanguageToggle";
@@ -40,6 +40,7 @@ export default function StoryReader({
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const page = story.pages[pageIdx];
+  const scenePlans = useMemo(() => planStory(story), [story]);
   const isLastPage = pageIdx === story.pages.length - 1;
 
   useEffect(() => {
@@ -255,7 +256,6 @@ export default function StoryReader({
     );
   }
 
-  const illustrationId = page.illustrationId ?? matchIllustration(page.sceneTags);
   let wordCounter = 0;
 
   return (
@@ -269,12 +269,7 @@ export default function StoryReader({
         <p className="text-sm font-semibold text-purple-400">{story.title.es}</p>
       </div>
 
-      <StoryScene
-        illustrationId={illustrationId}
-        sceneTags={page.sceneTags}
-        seed={`${story.id}:${page.pageNumber}`}
-        direction={direction}
-      />
+      <StoryScene plan={scenePlans[pageIdx]} direction={direction} />
 
       <div
         key={pageIdx}

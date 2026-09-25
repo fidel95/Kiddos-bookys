@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { SceneSpec, Stage } from "@/lib/scene3d/stage";
+import type { Stage } from "@/lib/scene3d/stage";
+import type { ScenePlan } from "@/lib/scene3d/director";
 import { illustrationSrc } from "@/lib/matchIllustration";
 import { playBoing, playPop } from "@/lib/sfx";
 
@@ -9,15 +10,10 @@ import { playBoing, playPop } from "@/lib/sfx";
  * The page's illustration: a live 3D pop-up diorama (three.js, loaded lazily so it stays out of the
  * main bundle). The flat SVG shows while it loads, and stays as the fallback if WebGL isn't available.
  */
-export default function StoryScene({
-  illustrationId,
-  sceneTags,
-  seed,
-  direction,
-}: SceneSpec & { direction: 1 | -1 }) {
+export default function StoryScene({ plan, direction }: { plan: ScenePlan; direction: 1 | -1 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Stage | null>(null);
-  const specRef = useRef<SceneSpec>({ illustrationId, sceneTags, seed });
+  const planRef = useRef(plan);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [showHint, setShowHint] = useState(true);
 
@@ -30,6 +26,8 @@ export default function StoryScene({
         try {
           stage = new StageClass(containerRef.current, {
             reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+            // ?quality=high keeps bloom and shadows on even if the device looks slow.
+            forceHighQuality: new URLSearchParams(window.location.search).get("quality") === "high",
             onTap: (target) => {
               if (target === "character") playBoing();
               else playPop();
@@ -42,7 +40,7 @@ export default function StoryScene({
           return;
         }
         stageRef.current = stage;
-        stage.show(specRef.current, 1);
+        stage.show(planRef.current, 1);
         setStatus("ready");
       })
       .catch(() => {
@@ -56,9 +54,9 @@ export default function StoryScene({
   }, []);
 
   useEffect(() => {
-    specRef.current = { illustrationId, sceneTags, seed };
-    stageRef.current?.show(specRef.current, direction);
-  }, [illustrationId, sceneTags, seed, direction]);
+    planRef.current = plan;
+    stageRef.current?.show(plan, direction);
+  }, [plan, direction]);
 
   useEffect(() => {
     if (status !== "ready") return;
@@ -70,7 +68,7 @@ export default function StoryScene({
     <div className="relative w-full h-64 sm:h-80 rounded-3xl overflow-hidden shadow-lg border-4 border-white bg-sky-100 scene-frame">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={illustrationSrc(illustrationId)}
+        src={illustrationSrc(plan.world)}
         alt=""
         className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
           status === "ready" ? "opacity-0" : "opacity-100"

@@ -153,12 +153,14 @@ export function sun(): Decor {
     eyes(0.09, 0.25, [0, 0.12, 0.82]),
     part(G.torus(0.15, PI), toon(0xe07a1f), { pos: [0, -0.15, 0.86], rot: [0, 0, PI], scale: 0.2, shadow: false })
   );
-  return { object: group(rays, face), update: (t) => (rays.rotation.z = t * 0.3) };
+  const object = group(rays, face);
+  object.userData.isSun = true; // hidden on rainy, sunset and night pages
+  return { object, update: (t) => (rays.rotation.z = t * 0.3) };
 }
 
 export function moon(): Decor {
   const m = group(
-    part(G.sphere(), toon(0xfff6c8, 0.9), { scale: 1.1, shadow: false }),
+    part(G.sphere(), toon(0xfff6c8, 1.5), { scale: 1.1, shadow: false }),
     part(G.sphere(), toon(0xe9dc9c, 0.6), { pos: [0.35, 0.3, 0.9], scale: [0.2, 0.2, 0.1], shadow: false }),
     part(G.sphere(), toon(0xe9dc9c, 0.6), { pos: [-0.4, -0.25, 0.92], scale: [0.14, 0.14, 0.08], shadow: false }),
     // Sleepy closed eyes
@@ -185,7 +187,7 @@ export function hill(rng: Rng, color: number): Decor {
 }
 
 export function house(glowWindows = false): Decor {
-  const win = toon(0xfff3a0, glowWindows ? 1 : 0.1);
+  const win = toon(0xfff3a0, glowWindows ? 2 : 0.1);
   return {
     object: group(
       part(G.box(), toon(0xffe0b5), { pos: [0, 0.6, 0], scale: [1.4, 1.2, 1.2] }),
@@ -267,7 +269,7 @@ export function crystal(rng: Rng): Decor {
   const c = group();
   for (let i = 0; i < 3; i++) {
     const h = range(rng, 0.5, 1.1);
-    c.add(part(G.pyramid(), toon(color, 0.55), { pos: [(i - 1) * 0.18, h / 2, (i % 2) * 0.1], rot: [0, rng(), (i - 1) * 0.3], scale: [0.14, h, 0.14] }));
+    c.add(part(G.pyramid(), toon(color, 1.1), { pos: [(i - 1) * 0.18, h / 2, (i % 2) * 0.1], rot: [0, rng(), (i - 1) * 0.3], scale: [0.14, h, 0.14] }));
   }
   const phase = rng() * 10;
   return { object: c, update: (t) => (c.position.y = 0.1 + S(t * 1.5 + phase) * 0.1) };
@@ -442,7 +444,7 @@ export function signpost(): Decor {
 
 export function star(rng: Rng): Decor {
   const s = group();
-  const color = toon(pick(rng, [0xffe066, 0xfff3a0, 0xffb3e6]), 0.9);
+  const color = toon(pick(rng, [0xffe066, 0xfff3a0, 0xffb3e6]), 1.5);
   for (let i = 0; i < 5; i++) {
     const arm = group(part(G.cone(), color, { pos: [0, 0.2, 0], scale: [0.1, 0.3, 0.06], shadow: false }));
     arm.rotation.z = (i / 5) * PI * 2;

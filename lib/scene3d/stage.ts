@@ -1,25 +1,29 @@
 import * as THREE from "three";
-import { buildCharacter, charactersFromTags } from "./characters";
-import { G, getDotTexture, hashString, part, pick, range, seededRandom, toon, type Rng } from "./kit";
-import { worldFor, type Environment, type ParticleKind } from "./worlds";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { buildCharacter } from "./characters";
+import * as D from "./decor";
+import type { Action, ScenePlan, Shot } from "./director";
+import { G, getDotTexture, getStreakTexture, getZTexture, hashString, part, pick, range, seededRandom, toon, type Rng } from "./kit";
+import { buildLandmark } from "./landmarks";
+import { lookFor, type Look } from "./moods";
+import { worldFor, type ParticleKind, type Placement } from "./worlds";
 
 /**
- * A pop-up-book stage: each story page is a little 3D diorama. On page turns the old diorama
- * folds flat and shrinks away while the new one pops up out of the page, the sky blends to the
- * new theme and the camera swoops. Kids can tap characters to make them jump.
+ * A pop-up-book stage: each story page is a little 3D diorama planned by the director
+ * (world, mood, landmarks, cast and camera shot). On page turns the old diorama folds flat
+ * while the new one pops up out of the page, the light shifts to the new time of day and
+ * the camera flies to the new shot. Kids can tap characters to make them jump.
  */
-
-export interface SceneSpec {
-  illustrationId: string;
-  sceneTags: string[];
-  /** Stable per page, so the same page always builds the same layout. */
-  seed: string;
-}
 
 export type TapTarget = "character" | "decor" | "ground";
 
 export interface StageOptions {
   reducedMotion: boolean;
+  /** Skip the automatic quality drop on slow devices (used for testing). */
+  forceHighQuality?: boolean;
   onTap?: (target: TapTarget) => void;
 }
 
@@ -27,39 +31,57 @@ interface Item {
   holder: THREE.Group;
   actor: THREE.Group;
   kind: "ground" | "decor" | "character";
+  base: THREE.Vector3;
   baseScale: number;
   delay: number;
   exitDelay: number;
   update?: (t: number) => void;
   flying: boolean;
+  action: Action;
   phase: number;
   height: number;
   reactStart: number;
+  zs?: THREE.Sprite[];
 }
 
 interface World {
   id: string;
+  groundColor: number;
   root: THREE.Group;
   items: Item[];
-  particles: Particles;
+  particles: Particles[];
   bornAt: number;
   leavingAt: number | null;
-  camYaw: number;
+}
+
+interface ShotPose {
+  target: THREE.Vector3;
+  yaw: number;
+  radius: number;
+  height: number;
 }
 
 const POP_DURATION = 0.7;
 const EXIT_DURATION = 0.45;
-const ENV_BLEND = 0.9;
-const CAMERA_MOVE = 1.3;
-const CAMERA_TARGET = new THREE.Vector3(0, 1.5, 0);
+const LOOK_BLEND = 1.1;
+const CAMERA_MOVE = 1.6;
 
-const CHARACTER_SLOTS: Array<Array<[number, number]>> = [
+/** Character spots; index 0 (the hero) always gets the most prominent one. */
+const CAST_SLOTS: Array<Array<[number, number]>> = [
   [[0, 1.8]],
-  [[-1.5, 1.6], [1.5, 1.9]],
-  [[-2.3, 1.2], [0, 2.2], [2.3, 1.2]],
+  [[-1.4, 1.8], [1.5, 1.6]],
+  [[0, 2.2], [-2.3, 1.2], [2.3, 1.2]],
+  [[-0.95, 2.2], [0.95, 2.2], [-2.8, 0.9], [2.8, 0.9]],
 ];
 
+const LANDMARK_SPOTS = {
+  back: [{ x: 0, z: -2.8, rotY: 0 }, { x: -4.6, z: -3.4, rotY: 0.35 }],
+  side: [{ x: 3.9, z: -0.6, rotY: -0.4 }, { x: -3.9, z: -0.6, rotY: 0.4 }],
+  sky: [{ x: 0, y: 4.8, z: -8 }, { x: 3.5, y: 4.2, z: -7 }],
+};
+
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+const lerp = THREE.MathUtils.lerp;
 const easeOutBack = (x: number) => {
   const c1 = 1.70158;
   const c3 = c1 + 1;
@@ -69,24 +91,29 @@ const easeInBack = (x: number) => 2.70158 * x * x * x - 1.70158 * x * x;
 const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
 const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
+/** `boost` pushes glowing particles past 1.0 so the bloom pass makes them shine. */
+const PARTICLE_CONFIG: Record<ParticleKind, { count: number; size: number; colors: number[]; glow: boolean; boost: number }> = {
+  stars: { count: 280, size: 0.7, colors: [0xffffff, 0xfff3c4, 0xc9d6ff], glow: true, boost: 1.4 },
+  fireflies: { count: 70, size: 0.4, colors: [0xfff27a, 0xd9ff7a], glow: true, boost: 2.2 },
+  bubbles: { count: 80, size: 0.28, colors: [0xdffaff, 0xb8f0ff], glow: true, boost: 1 },
+  sparkles: { count: 110, size: 0.3, colors: [0xff9ce6, 0xffe066, 0x9be7ff, 0xc3a6ff], glow: true, boost: 1.5 },
+  pollen: { count: 60, size: 0.16, colors: [0xffffff, 0xfff3c4], glow: true, boost: 1 },
+  rain: { count: 520, size: 0.7, colors: [0xeef4ff, 0xd6e4f7], glow: false, boost: 1 },
+  snow: { count: 260, size: 0.17, colors: [0xffffff], glow: false, boost: 1 },
+};
+
 class Particles {
   readonly points: THREE.Points;
   private readonly base: Float32Array;
   private readonly baseColors: Float32Array;
   private readonly phase: Float32Array;
+  private readonly maxOpacity: number;
 
   constructor(
     private readonly kind: ParticleKind,
     rng: Rng
   ) {
-    const config = {
-      stars: { count: 260, size: 0.7, colors: [0xffffff, 0xfff3c4, 0xc9d6ff] },
-      fireflies: { count: 55, size: 0.35, colors: [0xfff27a, 0xd9ff7a] },
-      bubbles: { count: 80, size: 0.28, colors: [0xdffaff, 0xb8f0ff] },
-      sparkles: { count: 110, size: 0.3, colors: [0xff9ce6, 0xffe066, 0x9be7ff, 0xc3a6ff] },
-      pollen: { count: 60, size: 0.16, colors: [0xffffff, 0xfff3c4] },
-    }[kind];
-
+    const config = PARTICLE_CONFIG[kind];
     const count = config.count;
     this.base = new Float32Array(count * 3);
     this.baseColors = new Float32Array(count * 3);
@@ -96,14 +123,16 @@ class Particles {
       if (kind === "stars") {
         // Spread across the upper sky dome.
         const theta = rng() * Math.PI * 2;
-        const y = range(rng, 0.08, 1);
+        const y = range(rng, 0.06, 1);
         const r = range(rng, 38, 50);
         const flat = Math.sqrt(1 - y * y);
         this.base.set([Math.cos(theta) * flat * r, y * r, Math.sin(theta) * flat * r], i * 3);
+      } else if (kind === "rain" || kind === "snow") {
+        this.base.set([range(rng, -12, 12), range(rng, 0, 9), range(rng, -10, 7)], i * 3);
       } else {
         this.base.set([range(rng, -11, 11), range(rng, 0.2, 7), range(rng, -10, 5)], i * 3);
       }
-      color.set(pick(rng, config.colors));
+      color.set(pick(rng, config.colors)).multiplyScalar(config.boost);
       this.baseColors.set([color.r, color.g, color.b], i * 3);
       this.phase[i] = rng() * Math.PI * 2;
     }
@@ -111,14 +140,15 @@ class Particles {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(this.base.slice(), 3));
     geometry.setAttribute("color", new THREE.BufferAttribute(this.baseColors.slice(), 3));
+    this.maxOpacity = kind === "pollen" ? 0.6 : 1;
     const material = new THREE.PointsMaterial({
       size: config.size,
-      map: getDotTexture(),
+      map: kind === "rain" ? getStreakTexture() : getDotTexture(),
       vertexColors: true,
       transparent: true,
       opacity: 0,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: config.glow ? THREE.AdditiveBlending : THREE.NormalBlending,
       fog: kind !== "stars",
     });
     this.points = new THREE.Points(geometry, material);
@@ -126,7 +156,7 @@ class Particles {
   }
 
   set opacity(value: number) {
-    (this.points.material as THREE.PointsMaterial).opacity = value * (this.kind === "pollen" ? 0.6 : 1);
+    (this.points.material as THREE.PointsMaterial).opacity = value * this.maxOpacity;
   }
 
   update(t: number) {
@@ -167,6 +197,15 @@ class Particles {
           p[i * 3 + 1] = (by % 5) + Math.sin(t * 0.5 + ph) * 0.5;
           p[i * 3 + 2] = bz + Math.cos(t * 0.25 + ph) * 0.6;
           break;
+        case "rain":
+          p[i * 3] = bx - ((by - t * 11) % 9) * 0.05;
+          p[i * 3 + 1] = (((by - t * 11) % 9) + 9) % 9;
+          break;
+        case "snow":
+          p[i * 3] = bx + Math.sin(t * 0.7 + ph) * 0.6;
+          p[i * 3 + 1] = (((by - t * (0.5 + (ph % 1) * 0.4)) % 9) + 9) % 9;
+          p[i * 3 + 2] = bz + Math.cos(t * 0.5 + ph) * 0.3;
+          break;
       }
       c[i * 3] = this.baseColors[i * 3] * twinkle;
       c[i * 3 + 1] = this.baseColors[i * 3 + 1] * twinkle;
@@ -189,7 +228,7 @@ class Burst {
   age = 0;
 
   constructor(origin: THREE.Vector3) {
-    const count = 28;
+    const count = 32;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     this.velocity = new Float32Array(count * 3);
@@ -210,7 +249,7 @@ class Burst {
     this.points = new THREE.Points(
       geometry,
       new THREE.PointsMaterial({
-        size: 0.32,
+        size: 0.36,
         map: getDotTexture(),
         vertexColors: true,
         transparent: true,
@@ -263,7 +302,8 @@ const SKY_FRAGMENT = /* glsl */ `
   }
 `;
 
-interface Mood {
+/** The blendable part of a Look, as three.js values. */
+interface Atmosphere {
   skyTop: THREE.Color;
   skyBottom: THREE.Color;
   hemiSky: THREE.Color;
@@ -271,29 +311,33 @@ interface Mood {
   hemiIntensity: number;
   sunColor: THREE.Color;
   sunIntensity: number;
+  sunPosition: THREE.Vector3;
+  bloom: number;
 }
 
-function moodFromEnv(env: Environment): Mood {
+function atmosphereOf(look: Look): Atmosphere {
   return {
-    skyTop: new THREE.Color(env.skyTop),
-    skyBottom: new THREE.Color(env.skyBottom),
-    hemiSky: new THREE.Color(env.hemiSky),
-    hemiGround: new THREE.Color(env.hemiGround),
-    hemiIntensity: env.hemiIntensity,
-    sunColor: new THREE.Color(env.sunColor),
-    sunIntensity: env.sunIntensity,
+    skyTop: new THREE.Color(look.skyTop),
+    skyBottom: new THREE.Color(look.skyBottom),
+    hemiSky: new THREE.Color(look.hemiSky),
+    hemiGround: new THREE.Color(look.hemiGround),
+    hemiIntensity: look.hemiIntensity,
+    sunColor: new THREE.Color(look.sunColor),
+    sunIntensity: look.sunIntensity,
+    sunPosition: new THREE.Vector3(...look.sunPosition),
+    bloom: look.bloom,
   };
 }
 
-function cloneMood(m: Mood): Mood {
+function cloneAtmosphere(a: Atmosphere): Atmosphere {
   return {
-    skyTop: m.skyTop.clone(),
-    skyBottom: m.skyBottom.clone(),
-    hemiSky: m.hemiSky.clone(),
-    hemiGround: m.hemiGround.clone(),
-    hemiIntensity: m.hemiIntensity,
-    sunColor: m.sunColor.clone(),
-    sunIntensity: m.sunIntensity,
+    ...a,
+    skyTop: a.skyTop.clone(),
+    skyBottom: a.skyBottom.clone(),
+    hemiSky: a.hemiSky.clone(),
+    hemiGround: a.hemiGround.clone(),
+    sunColor: a.sunColor.clone(),
+    sunPosition: a.sunPosition.clone(),
   };
 }
 
@@ -301,13 +345,37 @@ function disposeTree(root: THREE.Object3D) {
   root.traverse((obj) => {
     if (!obj.userData.disposable) return;
     const mesh = obj as THREE.Mesh;
-    mesh.geometry?.dispose();
+    // Some meshes own only their material and borrow a shared, cached geometry.
+    if (obj.userData.ownGeometry !== false) mesh.geometry?.dispose();
     (mesh.material as THREE.Material | undefined)?.dispose();
   });
 }
 
+function poseFor(shot: Shot, rng: Rng, hero: { position: THREE.Vector3; height: number } | null): ShotPose {
+  const side = rng() < 0.5 ? -1 : 1;
+  switch (shot) {
+    case "close": {
+      const target = hero
+        ? hero.position.clone().add(new THREE.Vector3(0, hero.height * 0.5, 0))
+        : new THREE.Vector3(0, 1.2, 1.8);
+      return { target, yaw: side * range(rng, 0.15, 0.4), radius: 5.6, height: 0.8 };
+    }
+    case "low":
+      return { target: new THREE.Vector3(0, 2.7, 0), yaw: side * range(rng, 0.4, 0.6), radius: 7.6, height: -1.95 };
+    case "high":
+      return { target: new THREE.Vector3(0, 0.4, 0.8), yaw: side * range(rng, 0.1, 0.35), radius: 5.2, height: 8.6 };
+    case "side":
+      return { target: new THREE.Vector3(0, 1.3, 0.6), yaw: side * range(rng, 0.7, 0.95), radius: 8.2, height: 2.3 };
+    case "wide":
+    default:
+      return { target: new THREE.Vector3(0, 1.5, 0), yaw: side * range(rng, 0, 0.25), radius: 9, height: 2.9 };
+  }
+}
+
 export class Stage {
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly composer: EffectComposer;
+  private readonly bloomPass: UnrealBloomPass;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
   private readonly skyUniforms = {
@@ -323,15 +391,20 @@ export class Stage {
   private leaving: World[] = [];
   private bursts: Burst[] = [];
 
-  private mood: Mood | null = null;
-  private moodFrom: Mood | null = null;
-  private moodTo: Mood | null = null;
-  private moodStart = 0;
+  private atmosphere: Atmosphere | null = null;
+  private atmosphereFrom: Atmosphere | null = null;
+  private atmosphereTo: Atmosphere | null = null;
+  private atmosphereStart = 0;
 
-  private camYawFrom = 0;
-  private camYawTo = 0;
+  private poseFrom: ShotPose | null = null;
+  private poseTo: ShotPose | null = null;
   private camMoveStart = -Infinity;
   private camDirection = 1;
+
+  /** 2 = bloom + shadows, 1 = shadows only, 0 = neither at 1x resolution. */
+  private quality = 2;
+  private perfFrames = 0;
+  private perfTime = 0;
 
   private time = 0;
   private lastFrame = 0;
@@ -349,8 +422,8 @@ export class Stage {
     private readonly container: HTMLElement,
     private readonly options: StageOptions
   ) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "default" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     const canvas = this.renderer.domElement;
@@ -360,6 +433,17 @@ export class Stage {
     canvas.style.touchAction = "pan-y";
     canvas.style.cursor = "pointer";
     container.appendChild(canvas);
+
+    // Bloom makes lanterns, fireflies, the moon and magic actually glow. Rendered into a
+    // multisampled HDR target so edges stay smooth and bright things can exceed 1.0.
+    const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    this.composer = new EffectComposer(this.renderer, target);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // Threshold above 1: only HDR-bright things (strong emissives) bloom, never a pale sky.
+    // Sunlit white surfaces can also pass 1, which is why daytime moods keep the strength low.
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.5, 1.05);
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new OutputPass());
 
     this.scene.fog = this.fog;
     const sky = new THREE.Mesh(
@@ -375,16 +459,15 @@ export class Stage {
     sky.userData.disposable = true;
     this.scene.add(sky);
 
-    this.sun.position.set(6, 12, 8);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024);
     const sc = this.sun.shadow.camera;
-    sc.left = -12;
-    sc.right = 12;
-    sc.top = 12;
-    sc.bottom = -8;
+    sc.left = -13;
+    sc.right = 13;
+    sc.top = 13;
+    sc.bottom = -9;
     sc.near = 1;
-    sc.far = 40;
+    sc.far = 45;
     this.sun.shadow.bias = -0.0008;
     this.sun.shadow.normalBias = 0.02;
     this.scene.add(this.hemi, this.sun);
@@ -407,16 +490,19 @@ export class Stage {
   }
 
   /** Swap to a new page's diorama. `direction` is +1 for forward page turns, -1 for back. */
-  show(spec: SceneSpec, direction: 1 | -1 = 1) {
-    const def = worldFor(spec.illustrationId);
-    const rng = seededRandom(hashString(spec.seed));
+  show(plan: ScenePlan, direction: 1 | -1 = 1) {
+    const def = worldFor(plan.world);
+    const rng = seededRandom(hashString(plan.seed));
+    const look = lookFor(def.env, plan.mood, plan.world, plan.sparkle);
     const previous = this.current;
     const root = new THREE.Group();
     const items: Item[] = [];
 
-    // Same theme as before? Keep the ground in place so only the scenery re-pops.
+    // Same world and ground as before? Keep the ground in place so only the scenery re-pops.
     const keptGround =
-      previous && previous.id === spec.illustrationId ? previous.items.find((i) => i.kind === "ground") : undefined;
+      previous && previous.id === plan.world && previous.groundColor === look.ground
+        ? previous.items.find((i) => i.kind === "ground")
+        : undefined;
     if (keptGround && previous) {
       previous.items = previous.items.filter((i) => i !== keptGround);
       keptGround.delay = -Infinity; // already fully grown; don't pop it again
@@ -425,9 +511,9 @@ export class Stage {
     } else {
       const ground = new THREE.Group();
       ground.add(
-        part(G.disc(), toon(def.env.ground), { rot: [-Math.PI / 2, 0, 0], scale: 17, shadow: false }),
+        part(G.disc(), toon(look.ground), { rot: [-Math.PI / 2, 0, 0], scale: 17, shadow: false }),
         // The diorama's "page thickness", tucked just under the top so the two never z-fight.
-        part(G.cylinder(), toon(new THREE.Color(def.env.ground).multiplyScalar(0.75)), {
+        part(G.cylinder(), toon(new THREE.Color(look.ground).multiplyScalar(0.75)), {
           pos: [0, -0.52, 0],
           scale: [17, 1, 17],
           shadow: false,
@@ -436,11 +522,47 @@ export class Stage {
       items.push(this.addItem(root, ground, { kind: "ground", delay: 0, x: 0, z: 0 }));
     }
 
-    for (const placement of def.decor(rng)) {
+    // Landmarks: the page's set pieces.
+    const landmarkPlacements: Array<Placement & { clear: number; bridge: boolean; bed: boolean }> = [];
+    const used = { back: 0, side: 0, sky: 0 };
+    for (const kind of plan.landmarks) {
+      if (def.includes?.includes(kind)) continue;
+      const landmark = buildLandmark(kind, rng, look.night);
+      let spot: { x: number; y?: number; z: number; rotY?: number };
+      if (landmark.spot === "ground") spot = { x: 0, z: 0 };
+      else spot = LANDMARK_SPOTS[landmark.spot][Math.min(used[landmark.spot]++, 1)];
+      landmarkPlacements.push({
+        decor: landmark.decor,
+        ...spot,
+        scale: landmark.scale,
+        clear: landmark.clear,
+        bridge: kind === "bridge",
+        bed: kind === "bed",
+      });
+    }
+    // Night pages get a moon (unless the world already has one or is underwater/in space).
+    const extras: Placement[] = [];
+    if (look.night && !["night", "ocean", "space"].includes(plan.world)) {
+      extras.push({ decor: D.moon(), x: range(rng, 4, 7), y: 5.2, z: -13 });
+    }
+    if (plan.mood === "rain") {
+      for (let i = 0; i < 4; i++) extras.push({ decor: D.cloud(rng, 0x9aa6b8), x: -7 + i * 4.5, y: range(rng, 4.2, 5.4), z: range(rng, -10, -7) });
+    }
+
+    const blocked = (x: number, z: number, y = 0) =>
+      y < 2 &&
+      landmarkPlacements.some((l) =>
+        l.bridge ? Math.abs(z - l.z) < 1.6 : l.clear > 0 && Math.hypot(x - l.x, z - l.z) < l.clear
+      );
+    const sunny = plan.mood === "day" || plan.mood === "morning";
+    const scenery = def.decor(rng).filter((p) => !blocked(p.x, p.z, p.y) && (sunny || !p.decor.object.userData.isSun));
+
+    for (const placement of [...scenery, ...extras, ...landmarkPlacements]) {
+      const isLandmark = landmarkPlacements.includes(placement as (typeof landmarkPlacements)[number]);
       const dist = Math.hypot(placement.x, placement.z);
       const item = this.addItem(root, placement.decor.object, {
         kind: "decor",
-        delay: 0.08 + dist * 0.025 + rng() * 0.12,
+        delay: isLandmark ? 0.3 : 0.08 + dist * 0.025 + rng() * 0.12,
         x: placement.x,
         y: placement.y ?? 0,
         z: placement.z,
@@ -451,30 +573,41 @@ export class Stage {
       items.push(item);
     }
 
-    const kinds = charactersFromTags(spec.sceneTags).slice(0, 3);
-    if (kinds.length === 0) kinds.push(pick(rng, def.heroes));
-    const slots = CHARACTER_SLOTS[kinds.length - 1];
-    kinds.forEach((kind, i) => {
-      const actor = buildCharacter(kind);
-      const [x, z] = slots[i];
-      const y = actor.flying ? Math.min(2.4, Math.max(0.8, 2.6 - actor.height * 0.6)) : 0;
-      const item = this.addItem(root, actor.model, {
-        kind: "character",
-        delay: 0.5 + i * 0.14,
-        x,
-        y,
-        z,
-        rotY: -x * 0.12,
-        scale: 1.3 * Math.min(1.5, Math.max(0.95, 1.8 / actor.height)),
-      });
+    // Cast: who's on this page and what they're doing.
+    const cast = plan.cast.length ? plan.cast : [{ kind: pick(rng, def.heroes), action: "idle" as Action }];
+    let slots = CAST_SLOTS[cast.length - 1];
+    // A lone hero steps aside so a house or castle behind them stays in view.
+    if (cast.length === 1 && landmarkPlacements.some((l) => l.z < -2 && (l.y ?? 0) < 2)) slots = [[-1.3, 1.8]];
+    const bed = landmarkPlacements.find((l) => l.bed);
+    let bedTaken = false;
+    let hero: { position: THREE.Vector3; height: number } | null = null;
+    for (const [i, member] of cast.entries()) {
+      const actor = buildCharacter(member.kind);
+      let [x, z] = slots[i];
+      const flying = !!actor.flying;
+      let y = flying ? Math.min(2.4, Math.max(0.8, 2.6 - actor.height * 0.6)) : 0;
+      let scale = 1.3 * Math.min(1.5, Math.max(0.95, 1.8 / actor.height));
+      let rotY = -x * 0.12;
+      // A sleepyhead goes in the bed, head on the pillow.
+      if (bed && !bedTaken && !flying && member.action === "sleep") {
+        bedTaken = true;
+        [x, y, z] = [bed.x, 0.62, bed.z];
+        rotY = (bed.rotY ?? 0) - Math.PI / 2;
+        scale *= 0.6;
+      }
+      const item = this.addItem(root, actor.model, { kind: "character", delay: 0.5 + i * 0.14, x, y, z, rotY, scale });
       item.update = actor.update;
-      item.flying = !!actor.flying;
+      item.flying = flying;
       item.height = actor.height;
+      // Flying characters can't lie down, so they just drift.
+      item.action = flying && member.action === "sleep" ? "idle" : member.action;
+      if (item.action === "sleep") item.zs = this.addZs(item);
       items.push(item);
-    });
+      if (i === 0) hero = { position: new THREE.Vector3(x, y, z), height: actor.height * scale };
+    }
 
-    const particles = new Particles(def.env.particles, rng);
-    this.scene.add(root, particles.points);
+    const particles = look.particles.map((kind) => new Particles(kind, rng));
+    this.scene.add(root, ...particles.map((p) => p.points));
 
     if (previous) {
       previous.leavingAt = this.time;
@@ -484,25 +617,25 @@ export class Stage {
       this.leaving.push(previous);
     }
 
-    const world: World = {
-      id: spec.illustrationId,
+    this.current = {
+      id: plan.world,
+      groundColor: look.ground,
       root,
       items,
       particles,
       bornAt: this.time,
       leavingAt: null,
-      camYaw: range(rng, -0.25, 0.25),
     };
-    this.current = world;
 
-    const target = moodFromEnv(def.env);
-    this.moodFrom = this.mood ? cloneMood(this.mood) : cloneMood(target);
-    this.moodTo = target;
-    this.moodStart = this.time;
-    if (!this.mood) this.mood = cloneMood(target);
+    const target = atmosphereOf(look);
+    this.atmosphereFrom = this.atmosphere ? cloneAtmosphere(this.atmosphere) : cloneAtmosphere(target);
+    this.atmosphereTo = target;
+    this.atmosphereStart = this.time;
+    if (!this.atmosphere) this.atmosphere = cloneAtmosphere(target);
 
-    this.camYawFrom = previous ? this.currentYawBase() : world.camYaw;
-    this.camYawTo = world.camYaw;
+    const pose = poseFor(plan.shot, rng, hero);
+    this.poseFrom = previous && this.poseTo ? this.currentPose() : pose;
+    this.poseTo = pose;
     this.camMoveStart = previous ? this.time : -Infinity;
     this.camDirection = direction;
 
@@ -522,9 +655,15 @@ export class Stage {
     for (const world of [...this.leaving, ...(this.current ? [this.current] : [])]) this.disposeWorld(world);
     this.bursts.forEach((b) => b.dispose());
     disposeTree(this.scene);
+    this.composer.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     canvas.remove();
+  }
+
+  private pixelRatio() {
+    const cap = this.quality === 0 ? 1 : this.quality === 1 ? 1.5 : 1.75;
+    return Math.min(window.devicePixelRatio || 1, cap);
   }
 
   private addItem(
@@ -544,10 +683,12 @@ export class Stage {
       holder,
       actor,
       kind: o.kind,
+      base: holder.position.clone(),
       baseScale: o.scale ?? 1,
       delay: this.options.reducedMotion ? 0 : o.delay,
       exitDelay: 0,
       flying: false,
+      action: "idle",
       phase: Math.random() * Math.PI * 2,
       height: 1,
       reactStart: -Infinity,
@@ -556,15 +697,24 @@ export class Stage {
     return item;
   }
 
-  private disposeWorld(world: World) {
-    this.scene.remove(world.root, world.particles.points);
-    world.particles.dispose();
-    disposeTree(world.root);
+  /** Little "Z"s that float up from a sleeping character. */
+  private addZs(item: Item): THREE.Sprite[] {
+    return [0, 1, 2].map(() => {
+      const z = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: getZTexture(), transparent: true, depthWrite: false })
+      );
+      z.userData.disposable = true;
+      z.userData.ownGeometry = false;
+      z.raycast = () => {}; // taps go through to the sleeper
+      item.holder.add(z);
+      return z;
+    });
   }
 
-  private currentYawBase(): number {
-    const k = this.cameraProgress();
-    return THREE.MathUtils.lerp(this.camYawFrom, this.camYawTo, easeInOut(k));
+  private disposeWorld(world: World) {
+    this.scene.remove(world.root, ...world.particles.map((p) => p.points));
+    world.particles.forEach((p) => p.dispose());
+    disposeTree(world.root);
   }
 
   private cameraProgress(): number {
@@ -572,11 +722,27 @@ export class Stage {
     return clamp01((this.time - this.camMoveStart) / CAMERA_MOVE);
   }
 
+  private currentPose(): ShotPose {
+    const a = this.poseFrom!;
+    const b = this.poseTo!;
+    const e = easeInOut(this.cameraProgress());
+    return {
+      target: a.target.clone().lerp(b.target, e),
+      yaw: lerp(a.yaw, b.yaw, e),
+      radius: lerp(a.radius, b.radius, e),
+      height: lerp(a.height, b.height, e),
+    };
+  }
+
   private resize() {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     if (!w || !h) return;
+    const ratio = this.pixelRatio();
+    this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
+    this.composer.setPixelRatio(ratio);
+    this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     if (!this.running) this.renderFrame(0);
@@ -592,10 +758,30 @@ export class Stage {
 
   private readonly tick = () => {
     const now = performance.now();
-    const dt = Math.min((now - this.lastFrame) / 1000, 0.05);
+    const rawDt = (now - this.lastFrame) / 1000;
     this.lastFrame = now;
-    this.renderFrame(dt);
+    this.watchPerformance(rawDt);
+    this.renderFrame(Math.min(rawDt, 0.05));
   };
+
+  /** Steps quality down if the device can't keep up (~30fps), so older tablets stay smooth. */
+  private watchPerformance(dt: number) {
+    if (this.options.forceHighQuality || this.quality === 0) return;
+    if (this.time < 1.5 || dt > 0.5) return; // skip warm-up and returning from a hidden tab
+    this.perfFrames++;
+    this.perfTime += dt;
+    if (this.perfFrames < 90) return;
+    const average = this.perfTime / this.perfFrames;
+    this.perfFrames = 0;
+    this.perfTime = 0;
+    if (average < 1 / 30) return;
+    this.quality--;
+    if (this.quality === 0) {
+      this.renderer.shadowMap.enabled = false;
+      this.sun.castShadow = false;
+    }
+    this.resize();
+  }
 
   private renderFrame(dt: number) {
     this.time += dt;
@@ -619,16 +805,20 @@ export class Stage {
       return alive;
     });
 
-    this.blendMood(t);
+    this.blendAtmosphere(t);
     this.moveCamera(t);
-    this.renderer.render(this.scene, this.camera);
+    if (this.quality === 2) this.composer.render(dt);
+    else this.renderer.render(this.scene, this.camera);
   }
 
   private animateEntering(world: World, t: number, idleT: number) {
     const age = t - world.bornAt;
     const reduced = this.options.reducedMotion;
-    world.particles.opacity = reduced ? 1 : clamp01((age - 0.3) / 0.8);
-    world.particles.update(idleT);
+    const fade = reduced ? 1 : clamp01((age - 0.3) / 0.8);
+    world.particles.forEach((p) => {
+      p.opacity = fade;
+      p.update(idleT);
+    });
     for (const item of world.items) {
       const p = reduced ? 1 : clamp01((age - 0.15 - item.delay) / POP_DURATION);
       this.setScale(item, easeOutBack(p));
@@ -641,8 +831,10 @@ export class Stage {
   private animateLeaving(world: World, t: number, idleT: number): boolean {
     const age = t - (world.leavingAt ?? t);
     if (this.options.reducedMotion) return true;
-    world.particles.opacity = 1 - clamp01(age / 0.4);
-    world.particles.update(idleT);
+    world.particles.forEach((p) => {
+      p.opacity = 1 - clamp01(age / 0.4);
+      p.update(idleT);
+    });
     // Sink the old ground slightly so it never fights the new one.
     world.root.position.y = -0.03 - clamp01(age / 0.8) * 0.4;
     let done = true;
@@ -666,73 +858,145 @@ export class Stage {
     item.update?.(idleT);
     const actor = item.actor;
     const react = t - item.reactStart;
+    const ph = item.phase;
+
     let lift = 0;
     let spin = 0;
     let squash = 0;
-    let wobble = 0;
+    let tiltZ = 0;
+    let tiltX = 0;
+    let yaw = 0;
+    item.holder.position.copy(item.base);
+
+    if (item.kind === "character") {
+      switch (item.action) {
+        case "hop": {
+          const h = Math.abs(Math.sin(idleT * 4.5 + ph));
+          lift = h * 0.55;
+          squash = h < 0.25 ? (0.25 - h) * 0.5 : 0;
+          break;
+        }
+        case "run": {
+          const a = idleT * 1.3 + ph;
+          item.holder.position.x += Math.sin(a) * 1.3;
+          item.holder.position.z += Math.cos(a) * 0.5;
+          yaw = Math.atan2(Math.cos(a) * 1.3, -Math.sin(a) * 0.5) - item.holder.rotation.y;
+          lift = Math.abs(Math.sin(idleT * 10 + ph)) * 0.15;
+          tiltX = 0.12;
+          break;
+        }
+        case "dance":
+          yaw = idleT * 3 + ph;
+          lift = Math.abs(Math.sin(idleT * 6 + ph)) * 0.18;
+          tiltZ = Math.sin(idleT * 3 + ph) * 0.15;
+          break;
+        case "sleep":
+          tiltZ = Math.PI / 2 - 0.2;
+          lift = 0.36;
+          squash = -Math.sin(idleT * 1.4 + ph) * 0.03;
+          break;
+        case "wave":
+          tiltZ = Math.sin(idleT * 3.5 + ph) * 0.2;
+          break;
+        case "fly":
+          lift = 1.0 + Math.sin(idleT * 1.6 + ph) * 0.25;
+          tiltZ = Math.sin(idleT * 1.2 + ph) * 0.15;
+          break;
+        case "lookUp":
+          tiltX = -0.3 + Math.sin(idleT + ph) * 0.05;
+          break;
+        case "cheer": {
+          const h = Math.abs(Math.sin(idleT * 7 + ph));
+          lift = h * 0.35;
+          squash = h < 0.25 ? (0.25 - h) * 0.4 : 0;
+          break;
+        }
+        default:
+          break;
+      }
+      if (item.flying) lift += Math.sin(idleT * 1.4 + ph) * 0.15;
+      if (item.action !== "sleep") squash -= Math.sin(idleT * 2.2 + ph) * 0.02; // breathing
+    }
+
     if (react < 1) {
       if (item.kind === "character") {
-        const p = react;
-        lift = Math.sin(Math.PI * p) * 1.2;
-        spin = easeInOut(p) * Math.PI * 2;
-        squash = Math.sin(Math.PI * p * 2) * 0.12;
+        lift += Math.sin(Math.PI * react) * 1.2;
+        spin = easeInOut(react) * Math.PI * 2;
+        squash += Math.sin(Math.PI * react * 2) * 0.12;
       } else if (item.kind === "decor" && react < 0.8) {
         const p = react / 0.8;
-        wobble = Math.sin(p * Math.PI * 6) * 0.15 * (1 - p);
-        squash = Math.sin(p * Math.PI * 4) * 0.1 * (1 - p);
+        tiltZ += Math.sin(p * Math.PI * 6) * 0.15 * (1 - p);
+        squash += Math.sin(p * Math.PI * 4) * 0.1 * (1 - p);
       }
     }
-    const bob = item.kind === "character" && item.flying ? Math.sin(idleT * 1.4 + item.phase) * 0.15 : 0;
-    const breathe = item.kind === "character" ? Math.sin(idleT * 2.2 + item.phase) * 0.02 : 0;
-    actor.position.y = bob + lift;
-    actor.rotation.y = spin;
-    actor.rotation.z = wobble;
-    actor.scale.set(1 - squash * 0.5, 1 + squash + breathe, 1 - squash * 0.5);
+
+    actor.position.y = lift;
+    actor.rotation.set(tiltX, yaw + spin, tiltZ);
+    actor.scale.set(1 - squash * 0.5, 1 + squash, 1 - squash * 0.5);
+
+    if (item.zs) {
+      item.zs.forEach((z, i) => {
+        const k = (idleT * 0.35 + i / 3) % 1;
+        z.position.set(-item.height * 0.45 + k * 0.5, 0.6 + k * 1.3, 0.2);
+        z.scale.setScalar(0.22 + k * 0.25);
+        (z.material as THREE.SpriteMaterial).opacity = Math.sin(Math.PI * k);
+      });
+    }
   }
 
-  private blendMood(t: number) {
-    if (!this.mood || !this.moodFrom || !this.moodTo) return;
-    const k = this.options.reducedMotion ? 1 : easeInOut(clamp01((t - this.moodStart) / ENV_BLEND));
-    const { mood, moodFrom: a, moodTo: b } = this;
-    mood.skyTop.lerpColors(a.skyTop, b.skyTop, k);
-    mood.skyBottom.lerpColors(a.skyBottom, b.skyBottom, k);
-    mood.hemiSky.lerpColors(a.hemiSky, b.hemiSky, k);
-    mood.hemiGround.lerpColors(a.hemiGround, b.hemiGround, k);
-    mood.sunColor.lerpColors(a.sunColor, b.sunColor, k);
-    mood.hemiIntensity = THREE.MathUtils.lerp(a.hemiIntensity, b.hemiIntensity, k);
-    mood.sunIntensity = THREE.MathUtils.lerp(a.sunIntensity, b.sunIntensity, k);
+  private blendAtmosphere(t: number) {
+    if (!this.atmosphere || !this.atmosphereFrom || !this.atmosphereTo) return;
+    const k = this.options.reducedMotion ? 1 : easeInOut(clamp01((t - this.atmosphereStart) / LOOK_BLEND));
+    const { atmosphere: now, atmosphereFrom: a, atmosphereTo: b } = this;
+    now.skyTop.lerpColors(a.skyTop, b.skyTop, k);
+    now.skyBottom.lerpColors(a.skyBottom, b.skyBottom, k);
+    now.hemiSky.lerpColors(a.hemiSky, b.hemiSky, k);
+    now.hemiGround.lerpColors(a.hemiGround, b.hemiGround, k);
+    now.sunColor.lerpColors(a.sunColor, b.sunColor, k);
+    now.sunPosition.lerpVectors(a.sunPosition, b.sunPosition, k);
+    now.hemiIntensity = lerp(a.hemiIntensity, b.hemiIntensity, k);
+    now.sunIntensity = lerp(a.sunIntensity, b.sunIntensity, k);
+    now.bloom = lerp(a.bloom, b.bloom, k);
 
-    this.skyUniforms.topColor.value.copy(mood.skyTop);
-    this.skyUniforms.bottomColor.value.copy(mood.skyBottom);
-    this.fog.color.copy(mood.skyBottom);
-    this.hemi.color.copy(mood.hemiSky);
-    this.hemi.groundColor.copy(mood.hemiGround);
-    this.hemi.intensity = mood.hemiIntensity;
-    this.sun.color.copy(mood.sunColor);
-    this.sun.intensity = mood.sunIntensity;
+    this.skyUniforms.topColor.value.copy(now.skyTop);
+    this.skyUniforms.bottomColor.value.copy(now.skyBottom);
+    this.fog.color.copy(now.skyBottom);
+    this.hemi.color.copy(now.hemiSky);
+    this.hemi.groundColor.copy(now.hemiGround);
+    this.hemi.intensity = now.hemiIntensity;
+    this.sun.color.copy(now.sunColor);
+    this.sun.intensity = now.sunIntensity;
+    this.sun.position.copy(now.sunPosition);
+    this.bloomPass.strength = now.bloom;
   }
 
   private moveCamera(t: number) {
+    if (!this.poseTo || !this.poseFrom) return;
     const reduced = this.options.reducedMotion;
-    const k = this.cameraProgress();
-    const e = easeInOut(k);
+    const e = easeInOut(this.cameraProgress());
     const swoop = Math.sin(Math.PI * e);
+    const pose = this.currentPose();
 
     this.pointerSmoothed.lerp(this.pointer, reduced ? 1 : 0.05);
     const aspect = this.camera.aspect || 1.6;
     // Narrow (phone) frames pull back a little so the characters still fit.
     const fit = Math.min(1.35, Math.max(1, 1.6 / aspect));
 
-    let yaw = THREE.MathUtils.lerp(this.camYawFrom, this.camYawTo, e) + this.camDirection * swoop * 0.3;
-    let radius = 9 * fit + swoop * 1.8;
-    let height = 2.9 + swoop * 1.0;
+    let yaw = pose.yaw + this.camDirection * swoop * 0.3;
+    let radius = pose.radius * fit + swoop * 1.8;
+    let height = pose.height + swoop * 1.0;
     if (!reduced) {
       yaw += Math.sin(t * 0.17) * 0.05 + this.pointerSmoothed.x * 0.12;
       height += this.pointerSmoothed.y * 0.6;
       radius += Math.sin(t * 0.23) * 0.2;
     }
-    this.camera.position.set(Math.sin(yaw) * radius, CAMERA_TARGET.y + height, Math.cos(yaw) * radius);
-    this.camera.lookAt(CAMERA_TARGET);
+    const target = pose.target;
+    this.camera.position.set(
+      target.x + Math.sin(yaw) * radius,
+      Math.max(0.35, target.y + height),
+      target.z + Math.cos(yaw) * radius
+    );
+    this.camera.lookAt(target);
   }
 
   private setPointerFromEvent(e: PointerEvent) {

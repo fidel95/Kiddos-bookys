@@ -1,9 +1,10 @@
 import type { CharacterKind } from "./characters";
+import type { LandmarkKind } from "./director";
 import * as D from "./decor";
 import type { Decor } from "./decor";
 import { G, group, part, pick, range, toon, type Rng } from "./kit";
 
-export type ParticleKind = "fireflies" | "stars" | "bubbles" | "sparkles" | "pollen";
+export type ParticleKind = "fireflies" | "stars" | "bubbles" | "sparkles" | "pollen" | "rain" | "snow";
 
 export interface Environment {
   skyTop: number;
@@ -31,6 +32,8 @@ export interface WorldDef {
   env: Environment;
   /** Who shows up when the page's tags don't name anyone. */
   heroes: CharacterKind[];
+  /** Landmarks this world's scenery already has, so a page asking for one doesn't get two. */
+  includes?: LandmarkKind[];
   decor: (rng: Rng) => Placement[];
 }
 
@@ -172,6 +175,7 @@ export const WORLDS: Record<string, WorldDef> = {
       particles: "pollen",
     },
     heroes: ["dino"],
+    includes: ["volcano"],
     decor: (rng) => [
       { decor: D.volcano(), x: range(rng, -5, 5), z: -11 },
       ...scatter(rng, 7, D.palmTree),
@@ -217,6 +221,7 @@ export const WORLDS: Record<string, WorldDef> = {
       particles: "sparkles",
     },
     heroes: ["unicorn", "dragon", "wisp"],
+    includes: ["castle", "rainbow"],
     decor: (rng) => [
       { decor: D.castle(), x: range(rng, -2, 2), z: -8 },
       { decor: D.rainbow(), x: range(rng, 3, 6), y: 0, z: -12 },
@@ -241,6 +246,7 @@ export const WORLDS: Record<string, WorldDef> = {
       particles: "fireflies",
     },
     heroes: ["owl", "bunny"],
+    includes: ["house"],
     decor: (rng) => [
       { decor: D.moon(), x: range(rng, 4, 7), y: 5.2, z: -13 },
       { decor: D.house(true), x: range(rng, -6, -4), z: -4, rotY: 0.4 },
@@ -263,6 +269,7 @@ export const WORLDS: Record<string, WorldDef> = {
       particles: "pollen",
     },
     heroes: ["bear", "fox", "puppy"],
+    includes: ["mountain", "tent", "balloon", "path"],
     decor: (rng) => [
       { decor: D.mountain(rng), x: -5, z: -12 },
       { decor: D.mountain(rng, 0x9bb5e0), x: 1, z: -14 },
@@ -296,6 +303,7 @@ export const WORLDS: Record<string, WorldDef> = {
       particles: "pollen",
     },
     heroes: ["bunny", "butterfly", "bird", "kitten"],
+    includes: ["rainbow"],
     decor: (rng) => [
       { decor: D.sun(), x: -6, y: 5.4, z: -13 },
       { decor: D.rainbow(), x: range(rng, 2, 5), y: 0, z: -13 },

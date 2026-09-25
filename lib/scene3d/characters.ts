@@ -667,21 +667,21 @@ function butterfly(): Actor {
 }
 
 function wisp(): Actor {
-  const glow = part(G.sphere(), toon(0xffe27a, 1.1), { scale: 0.3, shadow: false });
+  const glow = part(G.sphere(), toon(0xffe27a, 1.6), { scale: 0.3, shadow: false });
   const halo = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: getDotTexture(),
       color: 0xfff2a8,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.45,
       depthWrite: false,
     })
   );
   halo.scale.setScalar(1.3);
   halo.userData.disposable = true;
+  halo.userData.ownGeometry = false; // sprites share one geometry
   const face = group(eyes(0.06, 0.1, [0, 0.05, 0.25]), cheeks(0.05, 0.17, [0, -0.06, 0.25]));
-  const light = new THREE.PointLight(0xffd966, 3, 5, 1.5);
-  const body = group(glow, halo, face, light);
+  const body = group(glow, halo, face);
   const model = group(body);
   return {
     model,
@@ -690,7 +690,6 @@ function wisp(): Actor {
     update: (t) => {
       body.position.set(S(t * 0.9) * 0.4, S(t * 1.7) * 0.25, 0);
       halo.scale.setScalar(1.2 + S(t * 4) * 0.15);
-      light.intensity = 2.5 + S(t * 4) * 0.6;
     },
   };
 }
@@ -719,63 +718,4 @@ const BUILDERS: Record<CharacterKind, () => Actor> = {
 
 export function buildCharacter(kind: CharacterKind): Actor {
   return BUILDERS[kind]();
-}
-
-/** Scene-tag words that summon a character onto the page. */
-const TAG_TO_CHARACTER: Record<string, CharacterKind> = {
-  fox: "fox",
-  bunny: "bunny",
-  rabbit: "bunny",
-  hare: "bunny",
-  owl: "owl",
-  deer: "deer",
-  fawn: "deer",
-  reindeer: "deer",
-  puppy: "puppy",
-  dog: "puppy",
-  kitten: "kitten",
-  cat: "kitten",
-  kitty: "kitten",
-  bear: "bear",
-  teddy: "bear",
-  bird: "bird",
-  parrot: "bird",
-  duck: "bird",
-  fish: "fish",
-  goldfish: "fish",
-  whale: "whale",
-  dolphin: "whale",
-  turtle: "turtle",
-  tortoise: "turtle",
-  dinosaur: "dino",
-  dino: "dino",
-  dragon: "dragon",
-  unicorn: "unicorn",
-  horse: "unicorn",
-  pony: "unicorn",
-  rocket: "rocket",
-  spaceship: "rocket",
-  car: "car",
-  truck: "car",
-  bus: "car",
-  train: "train",
-  butterfly: "butterfly",
-  butterflies: "butterfly",
-  light: "wisp",
-  fairy: "wisp",
-  firefly: "wisp",
-  glow: "wisp",
-  sparkle: "wisp",
-};
-
-export function charactersFromTags(tags: string[]): CharacterKind[] {
-  const found: CharacterKind[] = [];
-  for (const raw of tags) {
-    for (const word of raw.toLowerCase().split(/[^a-z]+/)) {
-      if (!word) continue;
-      const kind = TAG_TO_CHARACTER[word] ?? TAG_TO_CHARACTER[word.replace(/(es|s)$/, "")];
-      if (kind && !found.includes(kind)) found.push(kind);
-    }
-  }
-  return found;
 }

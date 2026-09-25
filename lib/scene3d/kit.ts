@@ -180,3 +180,45 @@ export function getDotTexture(): THREE.Texture {
   }
   return dotTexture;
 }
+
+let streakTexture: THREE.Texture | null = null;
+
+/** A soft vertical streak, so point particles read as falling rain. */
+export function getStreakTexture(): THREE.Texture {
+  if (!streakTexture) {
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+    const grad = ctx.createLinearGradient(0, 0, 0, size);
+    grad.addColorStop(0, "rgba(255,255,255,0)");
+    grad.addColorStop(0.5, "rgba(255,255,255,0.9)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(size / 2 - 2, 0, 4, size);
+    streakTexture = new THREE.CanvasTexture(canvas);
+  }
+  return streakTexture;
+}
+
+let zTexture: THREE.Texture | null = null;
+
+/** A chunky "Z" for sleeping characters. */
+export function getZTexture(): THREE.Texture {
+  if (!zTexture) {
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+    ctx.font = "bold 52px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = "#6a4fc9";
+    ctx.strokeText("Z", size / 2, size / 2 + 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("Z", size / 2, size / 2 + 2);
+    zTexture = new THREE.CanvasTexture(canvas);
+  }
+  return zTexture;
+}
