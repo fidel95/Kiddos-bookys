@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/", emoji: "🏠", label: "Home" },
-  { href: "/create", emoji: "✨", label: "New Story" },
-  { href: "/library", emoji: "📚", label: "My Storybooks" },
+  { href: "/", emoji: "📚", label: "Stories" },
+  { href: "/stickers", emoji: "🌟", label: "Stickers" },
 ];
 
 export default function Nav() {

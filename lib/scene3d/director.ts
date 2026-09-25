@@ -54,6 +54,8 @@ export interface ScenePlan {
   sparkle: boolean;
   /** Stable per page, so the same page always builds the same layout. */
   seed: string;
+  /** What this page's "find it" challenge asks the child to tap, if anything. */
+  find?: string;
 }
 
 const CHARACTER_WORDS: Record<string, CharacterKind> = {
@@ -151,6 +153,9 @@ const MOOD_WORDS: Array<[Mood, string[]]> = [
   ["sunset", ["sunset", "evening", "dusk", "twilight"]],
   ["morning", ["morning", "sunrise", "dawn", "breakfast", "woke", "wake"]],
 ];
+
+const ALL_CHARACTERS = new Set<CharacterKind>(Object.values(CHARACTER_WORDS));
+const ALL_LANDMARKS = new Set<LandmarkKind>(Object.values(LANDMARK_WORDS));
 
 const GROUP_WORDS = new Set(["they", "everyone", "everybody", "together", "all", "friends", "we"]);
 const SPARKLE_WORDS = new Set(["firefly", "fireflies", "sparkle", "sparkles", "sparkly", "glitter", "twinkle", "twinkled", "magic"]);
@@ -307,8 +312,20 @@ function pickShot(plan: Omit<ScenePlan, "shot">, pageIndex: number, previous: Sh
   else if (plan.cast.length >= 3) shot = "wide";
   else shot = SHOT_CYCLE[pageIndex % SHOT_CYCLE.length];
   if (shot === previous) shot = SHOT_CYCLE[(SHOT_CYCLE.indexOf(shot) + 1) % SHOT_CYCLE.length];
+
+  // The "find it" target has to be in frame, even if that repeats a shot.
+  const target = plan.find;
+  if (target) {
+    if (SKY_TARGETS.has(target)) return "low";
+    const isCharacter = plan.cast.some((c) => c.kind === target);
+    if (isCharacter && target !== hero?.kind && shot === "close") return "wide";
+    if (!isCharacter && (shot === "close" || shot === "high")) return shot === "high" ? "wide" : "side";
+  }
   return shot;
 }
+
+/** Things that live up in the sky: only the low, looking-up shot reliably shows them. */
+const SKY_TARGETS = new Set(["moon", "sun", "shootingStar", "cloud", "rainbow", "planet", "star", "balloon"]);
 
 /** Plans every page of a story at once, so consecutive pages can avoid repeating a shot. */
 export function planStory(story: Story): ScenePlan[] {
@@ -329,14 +346,27 @@ export function planStory(story: Story): ScenePlan[] {
     // Plural animals ("owls") bring a friend along, space permitting.
     for (const f of found) if (f.plural && cast.length < 4) cast.push({ kind: f.kind, action: "idle" });
 
+    // Whatever the "find it" challenge asks for must be in the picture.
+    const target = page.find?.target;
+    if (target && ALL_CHARACTERS.has(target as CharacterKind) && !cast.some((c) => c.kind === target)) {
+      if (cast.length >= 4) cast.pop();
+      cast.push({ kind: target as CharacterKind, action: "idle" });
+    }
+
     assignActions(page, cast, names);
     if (pageIndex === 0 && cast[0]?.action === "idle") cast[0].action = "wave";
+
+    let landmarks = pickLandmarks(page);
+    if (target && ALL_LANDMARKS.has(target as LandmarkKind) && !landmarks.includes(target as LandmarkKind)) {
+      landmarks = [target as LandmarkKind, ...landmarks].slice(0, 2);
+    }
 
     const base = {
       world,
       mood: pickMood(page.sceneTags, text, world),
       cast,
-      landmarks: pickLandmarks(page),
+      landmarks,
+      find: target,
       sparkle: allWords.some((w) => SPARKLE_WORDS.has(w)),
       seed: `${story.id}:${page.pageNumber}`,
     };

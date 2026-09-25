@@ -12,35 +12,44 @@ export interface Sentence {
   es: string;
 }
 
+/**
+ * A "find it" challenge: the child taps `target` in the 3D picture to earn a star.
+ * `target` is a character (e.g. "owl"), a landmark (e.g. "treasure") or a scenery tag
+ * (e.g. "mushroom", "moon") — see `lib/scene3d/`.
+ */
+export interface FindChallenge {
+  target: string;
+  prompt: Bilingual;
+}
+
 export interface Page {
   pageNumber: number;
   sentences: Sentence[];
   sceneTags: string[];
   illustrationId?: string;
+  find?: FindChallenge;
+}
+
+export interface QuizChoice {
+  emoji: string;
+  label: Bilingual;
 }
 
 export interface QuizQuestion {
   question: Bilingual;
-  choices: Bilingual[];
+  choices: QuizChoice[];
   answerIndex: number;
 }
 
 export interface Story {
   id: string;
-  createdAt: string;
   title: Bilingual;
-  childName?: string;
+  /** Emoji sticker earned for finishing the story. */
+  sticker: string;
+  /** Tailwind-free hex accent for the book cover. */
+  color: string;
   theme: string;
   ageRange: AgeRange;
   pages: Page[];
-  quiz?: QuizQuestion[];
-}
-
-export interface StoredStory extends Story {
-  isFavorite: boolean;
-  lastReadAt?: string;
-}
-
-export interface StoryLibrary {
-  stories: StoredStory[];
+  quiz: QuizQuestion[];
 }

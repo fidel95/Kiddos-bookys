@@ -1,16 +1,29 @@
 import * as THREE from "three";
 import { G, eyes, group, part, pick, range, toon, type Rng } from "./kit";
 
-/** Scenery pieces. Like characters, each stands on y = 0 so it can "pop up" from the page. */
+/**
+ * Scenery pieces. Like characters, each stands on y = 0 so it can "pop up" from the page.
+ * Every piece carries a `userData.tag` ("tree", "moon", "barn"…) so "find it" challenges
+ * can ask a child to tap it.
+ */
 export interface Decor {
   object: THREE.Object3D;
   update?: (t: number) => void;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function tagged<A extends any[]>(tag: string, build: (...args: A) => Decor): (...args: A) => Decor {
+  return (...args) => {
+    const decor = build(...args);
+    decor.object.userData.tag = tag;
+    return decor;
+  };
+}
+
 const S = Math.sin;
 const PI = Math.PI;
 
-export function roundTree(rng: Rng): Decor {
+function roundTreeBase(rng: Rng): Decor {
   const leaf = pick(rng, [0x4cc26b, 0x5fd17a, 0x3fae5e, 0x7bd88f]);
   const h = range(rng, 1.2, 1.8);
   const crown = group(
@@ -32,7 +45,7 @@ export function roundTree(rng: Rng): Decor {
   };
 }
 
-export function pineTree(rng: Rng, snowy = false): Decor {
+function pineTreeBase(rng: Rng, snowy = false): Decor {
   const color = pick(rng, [0x2f9e5b, 0x3aa865, 0x278c50]);
   const h = range(rng, 0.9, 1.3);
   const tree = group(part(G.cylinder(), toon(0x7a4b2a), { pos: [0, 0.25, 0], scale: [0.14, 0.5, 0.14] }));
@@ -46,7 +59,7 @@ export function pineTree(rng: Rng, snowy = false): Decor {
   return { object: tree };
 }
 
-export function palmTree(rng: Rng): Decor {
+function palmTreeBase(rng: Rng): Decor {
   const h = range(rng, 1.8, 2.6);
   const trunk = group();
   for (let i = 0; i < 6; i++) {
@@ -65,7 +78,7 @@ export function palmTree(rng: Rng): Decor {
   return { object: group(trunk, top), update: (t) => (top.rotation.z = S(t * 0.9 + phase) * 0.06) };
 }
 
-export function mushroom(rng: Rng, glow = 0): Decor {
+function mushroomBase(rng: Rng, glow = 0): Decor {
   const cap = pick(rng, [0xff5d5d, 0xff8fab, 0xb18cff, 0x6ec6ff]);
   const s = range(rng, 0.5, 0.9);
   const m = group(
@@ -78,7 +91,7 @@ export function mushroom(rng: Rng, glow = 0): Decor {
   return { object: m };
 }
 
-export function flower(rng: Rng): Decor {
+function flowerBase(rng: Rng): Decor {
   const petal = toon(pick(rng, [0xff8fab, 0xffd166, 0xb18cff, 0xff6b6b, 0x6ec6ff, 0xffffff]));
   const h = range(rng, 0.3, 0.55);
   const head = group(part(G.sphere(), toon(0xffc93c), { scale: [0.08, 0.08, 0.05] }));
@@ -95,7 +108,7 @@ export function flower(rng: Rng): Decor {
   };
 }
 
-export function sunflower(rng: Rng): Decor {
+function sunflowerBase(rng: Rng): Decor {
   const h = range(rng, 1.0, 1.5);
   const head = group(part(G.cylinder(), toon(0x7a4b2a), { rot: [PI / 2, 0, 0], scale: [0.16, 0.06, 0.16] }));
   for (let i = 0; i < 10; i++) {
@@ -114,7 +127,7 @@ export function sunflower(rng: Rng): Decor {
   };
 }
 
-export function bush(rng: Rng, color = 0x4cc26b): Decor {
+function bushBase(rng: Rng, color = 0x4cc26b): Decor {
   const s = range(rng, 0.4, 0.7);
   return {
     object: group(
@@ -125,12 +138,12 @@ export function bush(rng: Rng, color = 0x4cc26b): Decor {
   };
 }
 
-export function rock(rng: Rng, color = 0xb0a8c0): Decor {
+function rockBase(rng: Rng, color = 0xb0a8c0): Decor {
   const s = range(rng, 0.25, 0.55);
   return { object: group(part(G.rock(), toon(color), { pos: [0, s * 0.5, 0], scale: [s, s * 0.8, s], rot: [rng(), rng(), rng()] })) };
 }
 
-export function cloud(rng: Rng, color = 0xffffff): Decor {
+function cloudBase(rng: Rng, color = 0xffffff): Decor {
   const c = group();
   const n = 3 + Math.floor(rng() * 3);
   for (let i = 0; i < n; i++) {
@@ -141,7 +154,7 @@ export function cloud(rng: Rng, color = 0xffffff): Decor {
   return { object: c, update: (t) => (c.position.x = S(t * speed * 0.3 + phase) * 1.5) };
 }
 
-export function sun(): Decor {
+function sunBase(): Decor {
   const rays = group();
   for (let i = 0; i < 10; i++) {
     const ray = group(part(G.cone(), toon(0xffd166, 0.9), { pos: [0, 1.25, 0], scale: [0.14, 0.4, 0.06], shadow: false }));
@@ -158,7 +171,7 @@ export function sun(): Decor {
   return { object, update: (t) => (rays.rotation.z = t * 0.3) };
 }
 
-export function moon(): Decor {
+function moonBase(): Decor {
   const m = group(
     part(G.sphere(), toon(0xfff6c8, 1.5), { scale: 1.1, shadow: false }),
     part(G.sphere(), toon(0xe9dc9c, 0.6), { pos: [0.35, 0.3, 0.9], scale: [0.2, 0.2, 0.1], shadow: false }),
@@ -170,7 +183,7 @@ export function moon(): Decor {
   return { object: m, update: (t) => (m.rotation.z = S(t * 0.4) * 0.08) };
 }
 
-export function mountain(rng: Rng, color = 0x8fa8d8): Decor {
+function mountainBase(rng: Rng, color = 0x8fa8d8): Decor {
   const h = range(rng, 3, 5.5);
   const w = h * range(rng, 0.7, 0.95);
   return {
@@ -186,7 +199,7 @@ export function hill(rng: Rng, color: number): Decor {
   return { object: group(part(G.sphere(), toon(color), { pos: [0, 0, 0], scale: [r, r * 0.45, r * 0.8] })) };
 }
 
-export function house(glowWindows = false): Decor {
+function houseBase(glowWindows = false): Decor {
   const win = toon(0xfff3a0, glowWindows ? 2 : 0.1);
   return {
     object: group(
@@ -200,7 +213,7 @@ export function house(glowWindows = false): Decor {
   };
 }
 
-export function barn(): Decor {
+function barnBase(): Decor {
   const red = toon(0xe0524f);
   return {
     object: group(
@@ -215,7 +228,7 @@ export function barn(): Decor {
   };
 }
 
-export function fence(length: number): Decor {
+function fenceBase(length: number): Decor {
   const f = group();
   const wood = toon(0xf1d6a8);
   const posts = Math.max(2, Math.round(length / 0.7));
@@ -227,7 +240,7 @@ export function fence(length: number): Decor {
   return { object: f };
 }
 
-export function hayBale(): Decor {
+function hayBaleBase(): Decor {
   return {
     object: group(
       part(G.cylinder(), toon(0xf2c65b), { pos: [0, 0.35, 0], rot: [0, 0, PI / 2], scale: [0.35, 0.7, 0.35] }),
@@ -236,7 +249,7 @@ export function hayBale(): Decor {
   };
 }
 
-export function castle(): Decor {
+function castleBase(): Decor {
   const wall = toon(0xf3e8ff);
   const roof = toon(0xb18cff);
   const c = group(
@@ -256,7 +269,7 @@ export function castle(): Decor {
   return { object: c, update: (t) => flags.forEach((f, i) => (f.rotation.y = S(t * 3 + i) * 0.4)) };
 }
 
-export function rainbow(): Decor {
+function rainbowBase(): Decor {
   const r = group();
   [0xff6b6b, 0xffb347, 0xffe066, 0x7bd88f, 0x6ec6ff, 0xb18cff].forEach((c, i) => {
     r.add(part(G.torus(0.06, PI), toon(c, 0.35), { scale: 3.2 - i * 0.2, shadow: false }));
@@ -264,7 +277,7 @@ export function rainbow(): Decor {
   return { object: r };
 }
 
-export function crystal(rng: Rng): Decor {
+function crystalBase(rng: Rng): Decor {
   const color = pick(rng, [0x9be7ff, 0xff9ce6, 0xc3a6ff, 0x9dffc9]);
   const c = group();
   for (let i = 0; i < 3; i++) {
@@ -275,7 +288,7 @@ export function crystal(rng: Rng): Decor {
   return { object: c, update: (t) => (c.position.y = 0.1 + S(t * 1.5 + phase) * 0.1) };
 }
 
-export function planet(rng: Rng, radius: number): Decor {
+function planetBase(rng: Rng, radius: number): Decor {
   const color = pick(rng, [0xff9e6b, 0x6ec6ff, 0xb18cff, 0x7bd88f, 0xffd166]);
   const p = group(part(G.sphere(), toon(color, 0.25), { scale: radius, shadow: false }));
   const ring = part(G.torus(0.06), toon(0xfff3c4, 0.3), { rot: [PI / 2.4, 0.2, 0], scale: radius * 1.6, shadow: false });
@@ -293,7 +306,7 @@ export function crater(rng: Rng): Decor {
   };
 }
 
-export function seaweed(rng: Rng): Decor {
+function seaweedBase(rng: Rng): Decor {
   const color = pick(rng, [0x3fbf7f, 0x2fa36b, 0x6bd49a]);
   const segs: THREE.Object3D[] = [];
   let parent: THREE.Object3D = group();
@@ -310,7 +323,7 @@ export function seaweed(rng: Rng): Decor {
   return { object: root, update: (t) => segs.forEach((s, i) => (s.rotation.z = S(t * 1.2 + phase + i * 0.5) * 0.18)) };
 }
 
-export function coral(rng: Rng): Decor {
+function coralBase(rng: Rng): Decor {
   const color = toon(pick(rng, [0xff7aa2, 0xff9e6b, 0xb18cff, 0xffd166]));
   const c = group(part(G.cylinder(), color, { pos: [0, 0.3, 0], scale: [0.09, 0.6, 0.09] }));
   for (let i = 0; i < 4; i++) {
@@ -322,12 +335,12 @@ export function coral(rng: Rng): Decor {
   return { object: c };
 }
 
-export function shell(rng: Rng): Decor {
+function shellBase(rng: Rng): Decor {
   const color = pick(rng, [0xffc2d1, 0xffe0b5, 0xfff3e0]);
   return { object: group(part(G.hemisphere(), toon(color), { pos: [0, 0, 0], scale: [0.2, 0.12, 0.22], rot: [0, rng() * PI, 0] })) };
 }
 
-export function volcano(): Decor {
+function volcanoBase(): Decor {
   const puffs = [0, 1, 2, 3].map(() => part(G.sphere(), toon(0xe6e1f0), { scale: 0.4, shadow: false }));
   return {
     object: group(
@@ -345,7 +358,7 @@ export function volcano(): Decor {
   };
 }
 
-export function fern(rng: Rng): Decor {
+function fernBase(rng: Rng): Decor {
   const f = group();
   for (let i = 0; i < 5; i++) {
     const leaf = group(part(G.sphere(), toon(0x3fae5e), { pos: [0, 0.4, 0], scale: [0.1, 0.45, 0.04] }));
@@ -371,7 +384,7 @@ export function road(width: number): Decor {
   };
 }
 
-export function building(rng: Rng): Decor {
+function buildingBase(rng: Rng): Decor {
   const color = pick(rng, [0xffb3c8, 0xffe066, 0x9be7ff, 0xc3a6ff, 0xa6f0c6]);
   const h = range(rng, 1.8, 3.6);
   const b = group(part(G.box(), toon(color), { pos: [0, h / 2, 0], scale: [1.2, h, 1.0] }));
@@ -384,7 +397,7 @@ export function building(rng: Rng): Decor {
   return { object: b };
 }
 
-export function trafficLight(): Decor {
+function trafficLightBase(): Decor {
   const lamps = [0xff5d5d, 0xffd166, 0x7bd88f].map((c, i) =>
     part(G.sphere(), toon(c, 0.1), { pos: [0, 1.75 - i * 0.22, 0.1], scale: 0.08, shadow: false })
   );
@@ -403,7 +416,7 @@ export function trafficLight(): Decor {
   };
 }
 
-export function tent(): Decor {
+function tentBase(): Decor {
   return {
     object: group(
       part(G.pyramid(), toon(0xff8a50), { pos: [0, 0.6, 0], rot: [0, PI / 4, 0], scale: [1.0, 1.2, 1.0] }),
@@ -413,7 +426,7 @@ export function tent(): Decor {
   };
 }
 
-export function flag(rng: Rng): Decor {
+function flagBase(rng: Rng): Decor {
   const cloth = part(G.box(), toon(pick(rng, [0xff5d5d, 0xffd166, 0x6ec6ff])), { pos: [0.25, 1.35, 0], scale: [0.5, 0.3, 0.02] });
   return {
     object: group(part(G.cylinder(), toon(0xdddddd), { pos: [0, 0.8, 0], scale: [0.03, 1.6, 0.03] }), cloth),
@@ -421,7 +434,7 @@ export function flag(rng: Rng): Decor {
   };
 }
 
-export function balloon(rng: Rng): Decor {
+function balloonBase(rng: Rng): Decor {
   const color = pick(rng, [0xff6b6b, 0xffb347, 0x6ec6ff, 0xb18cff]);
   const b = group(
     part(G.sphere(), toon(color), { pos: [0, 1.0, 0], scale: [0.7, 0.8, 0.7] }),
@@ -432,7 +445,7 @@ export function balloon(rng: Rng): Decor {
   return { object: b, update: (t) => (b.position.y = S(t * 0.6 + phase) * 0.3) };
 }
 
-export function signpost(): Decor {
+function signpostBase(): Decor {
   return {
     object: group(
       part(G.cylinder(), toon(0x8b5a34), { pos: [0, 0.6, 0], scale: [0.05, 1.2, 0.05] }),
@@ -442,7 +455,7 @@ export function signpost(): Decor {
   };
 }
 
-export function star(rng: Rng): Decor {
+function starBase(rng: Rng): Decor {
   const s = group();
   const color = toon(pick(rng, [0xffe066, 0xfff3a0, 0xffb3e6]), 1.5);
   for (let i = 0; i < 5; i++) {
@@ -461,10 +474,44 @@ export function star(rng: Rng): Decor {
   };
 }
 
-export function lilypad(rng: Rng): Decor {
+function lilypadBase(rng: Rng): Decor {
   return {
     object: group(
       part(G.cylinder(), toon(0x5fd17a), { pos: [0, 0.02, 0], scale: [range(rng, 0.3, 0.5), 0.03, range(rng, 0.3, 0.5)], shadow: false })
     ),
   };
 }
+
+export const roundTree = tagged("tree", roundTreeBase);
+export const pineTree = tagged("tree", pineTreeBase);
+export const palmTree = tagged("tree", palmTreeBase);
+export const mushroom = tagged("mushroom", mushroomBase);
+export const flower = tagged("flower", flowerBase);
+export const sunflower = tagged("flower", sunflowerBase);
+export const bush = tagged("bush", bushBase);
+export const rock = tagged("rock", rockBase);
+export const cloud = tagged("cloud", cloudBase);
+export const sun = tagged("sun", sunBase);
+export const moon = tagged("moon", moonBase);
+export const mountain = tagged("mountain", mountainBase);
+export const house = tagged("house", houseBase);
+export const barn = tagged("barn", barnBase);
+export const fence = tagged("fence", fenceBase);
+export const hayBale = tagged("hay", hayBaleBase);
+export const castle = tagged("castle", castleBase);
+export const rainbow = tagged("rainbow", rainbowBase);
+export const crystal = tagged("crystal", crystalBase);
+export const planet = tagged("planet", planetBase);
+export const seaweed = tagged("seaweed", seaweedBase);
+export const coral = tagged("coral", coralBase);
+export const shell = tagged("shell", shellBase);
+export const volcano = tagged("volcano", volcanoBase);
+export const fern = tagged("fern", fernBase);
+export const building = tagged("building", buildingBase);
+export const trafficLight = tagged("trafficLight", trafficLightBase);
+export const tent = tagged("tent", tentBase);
+export const flag = tagged("flag", flagBase);
+export const balloon = tagged("balloon", balloonBase);
+export const signpost = tagged("signpost", signpostBase);
+export const star = tagged("star", starBase);
+export const lilypad = tagged("lilypad", lilypadBase);

@@ -69,3 +69,13 @@ export function playPageTurn() {
 export function playFanfare() {
   [523, 659, 784, 1047].forEach((f, i) => tone(f, f * 1.01, 0.3, 0.08, "triangle", i * 0.11));
 }
+
+/** Bright twinkle for finding something or answering right. */
+export function playFound() {
+  [784, 988, 1319].forEach((f, i) => tone(f, f * 1.02, 0.22, 0.09, "sine", i * 0.07));
+}
+
+/** Soft, friendly "not quite" — never a harsh buzzer. */
+export function playTryAgain() {
+  tone(330, 260, 0.25, 0.07, "triangle");
+}

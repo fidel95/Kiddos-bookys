@@ -83,9 +83,10 @@ body {
   box-shadow: 0 12px 30px -8px rgba(76, 29, 149, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
+/* Tailwind v4 centers with the `translate` property, so these animate `transform` only. */
 @keyframes hint-float {
-  0%, 100% { transform: translate(-50%, 0); }
-  50% { transform: translate(-50%, -4px); }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 
 .animate-hint {
@@ -131,5 +132,68 @@ body {
   }
   .confetti-piece {
     display: none;
+  }
+}
+
+/* ---- Games: find-it, quiz, stickers ---- */
+
+@keyframes found-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.animate-found {
+  animation: found-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out both;
+}
+
+@keyframes nudge {
+  0%, 100% { transform: translateX(0) scale(1); }
+  50% { transform: translateX(6px) scale(1.08); }
+}
+
+.animate-nudge {
+  animation: nudge 0.9s ease-in-out infinite;
+}
+
+@keyframes sticker-in {
+  0% { transform: scale(0) rotate(-200deg); }
+  70% { transform: scale(1.15) rotate(10deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.animate-sticker {
+  animation: sticker-in 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+
+.animate-wiggle {
+  animation: wiggle 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-found,
+  .animate-shake,
+  .animate-nudge,
+  .animate-sticker,
+  .animate-wiggle {
+    animation: none;
   }
 }

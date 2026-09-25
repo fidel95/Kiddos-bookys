@@ -147,6 +147,7 @@ function cave(): Decor {
   const crystals = [0x9be7ff, 0xff9ce6, 0xc3a6ff].map((c, i) =>
     part(G.pyramid(), toon(c, 1.3), { pos: [-0.9 + i * 0.9, 0.3, 1.25 + (i % 2) * 0.1], rot: [0, i, (i - 1) * 0.3], scale: [0.12, 0.6, 0.12], shadow: false })
   );
+  crystals.forEach((c) => (c.userData.tag = "crystal"));
   return {
     object: group(
       part(G.blob(), toon(0x9d93b5), { pos: [0, 0.9, 0], scale: [2.4, 1.9, 1.6] }),

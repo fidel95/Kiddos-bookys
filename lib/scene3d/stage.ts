@@ -24,7 +24,8 @@ export interface StageOptions {
   reducedMotion: boolean;
   /** Skip the automatic quality drop on slow devices (used for testing). */
   forceHighQuality?: boolean;
-  onTap?: (target: TapTarget) => void;
+  /** `tags` names what was tapped ("fox", "moon", "treasure"…) for "find it" challenges. */
+  onTap?: (target: TapTarget, tags: string[]) => void;
 }
 
 interface Item {
@@ -41,6 +42,10 @@ interface Item {
   phase: number;
   height: number;
   reactStart: number;
+  /** The character or landmark kind, if this is one. */
+  ownTag?: string;
+  /** Everything findable in this item: its own tag plus scenery tags inside it. */
+  tags: Set<string>;
   zs?: THREE.Sprite[];
 }
 
@@ -73,6 +78,12 @@ const CAST_SLOTS: Array<Array<[number, number]>> = [
   [[0, 2.2], [-2.3, 1.2], [2.3, 1.2]],
   [[-0.95, 2.2], [0.95, 2.2], [-2.8, 0.9], [2.8, 0.9]],
 ];
+
+/** Scenery that's small enough to need a boost when it's the "find it" target. */
+const SMALL_TARGETS = new Set([
+  "mushroom", "flower", "crystal", "shell", "seaweed", "hay", "star", "planet", "coral", "rock",
+  "fern", "bush", "trafficLight", "treasure", "campfire", "shootingStar", "moon", "sun",
+]);
 
 const LANDMARK_SPOTS = {
   back: [{ x: 0, z: -2.8, rotY: 0 }, { x: -4.6, z: -3.4, rotY: 0.35 }],
@@ -227,8 +238,7 @@ class Burst {
   private readonly velocity: Float32Array;
   age = 0;
 
-  constructor(origin: THREE.Vector3) {
-    const count = 32;
+  constructor(origin: THREE.Vector3, count: number) {
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     this.velocity = new Float32Array(count * 3);
@@ -490,7 +500,7 @@ export class Stage {
   }
 
   /** Swap to a new page's diorama. `direction` is +1 for forward page turns, -1 for back. */
-  show(plan: ScenePlan, direction: 1 | -1 = 1) {
+  show(plan: ScenePlan, direction: 1 | -1 = 1): string[] {
     const def = worldFor(plan.world);
     const rng = seededRandom(hashString(plan.seed));
     const look = lookFor(def.env, plan.mood, plan.world, plan.sparkle);
@@ -523,7 +533,7 @@ export class Stage {
     }
 
     // Landmarks: the page's set pieces.
-    const landmarkPlacements: Array<Placement & { clear: number; bridge: boolean; bed: boolean }> = [];
+    const landmarkPlacements: Array<Placement & { clear: number; bridge: boolean; bed: boolean; kind: string }> = [];
     const used = { back: 0, side: 0, sky: 0 };
     for (const kind of plan.landmarks) {
       if (def.includes?.includes(kind)) continue;
@@ -538,6 +548,7 @@ export class Stage {
         clear: landmark.clear,
         bridge: kind === "bridge",
         bed: kind === "bed",
+        kind,
       });
     }
     // Night pages get a moon (unless the world already has one or is underwater/in space).
@@ -562,6 +573,7 @@ export class Stage {
       const dist = Math.hypot(placement.x, placement.z);
       const item = this.addItem(root, placement.decor.object, {
         kind: "decor",
+        tag: isLandmark ? (placement as (typeof landmarkPlacements)[number]).kind : undefined,
         delay: isLandmark ? 0.3 : 0.08 + dist * 0.025 + rng() * 0.12,
         x: placement.x,
         y: placement.y ?? 0,
@@ -595,7 +607,7 @@ export class Stage {
         rotY = (bed.rotY ?? 0) - Math.PI / 2;
         scale *= 0.6;
       }
-      const item = this.addItem(root, actor.model, { kind: "character", delay: 0.5 + i * 0.14, x, y, z, rotY, scale });
+      const item = this.addItem(root, actor.model, { kind: "character", tag: member.kind, delay: 0.5 + i * 0.14, x, y, z, rotY, scale });
       item.update = actor.update;
       item.flying = flying;
       item.height = actor.height;
@@ -605,6 +617,10 @@ export class Stage {
       items.push(item);
       if (i === 0) hero = { position: new THREE.Vector3(x, y, z), height: actor.height * scale };
     }
+
+    // The thing to find should be easy to spot: small pieces grow while they're the target.
+    const findItems = plan.find ? items.filter((i) => i.tags.has(plan.find!) && i.kind !== "ground") : [];
+    if (plan.find && SMALL_TARGETS.has(plan.find)) findItems.forEach((i) => (i.baseScale *= 1.7));
 
     const particles = look.particles.map((kind) => new Particles(kind, rng));
     this.scene.add(root, ...particles.map((p) => p.points));
@@ -634,12 +650,46 @@ export class Stage {
     if (!this.atmosphere) this.atmosphere = cloneAtmosphere(target);
 
     const pose = poseFor(plan.shot, rng, hero);
+    // Lean the shot toward what the child is asked to find, so it's well inside the frame.
+    const focusItems = findItems.filter((i) => i.kind !== "character");
+    if (focusItems.length) {
+      const nearest = focusItems.reduce((a, b) => (Math.abs(a.base.x) < Math.abs(b.base.x) ? a : b));
+      pose.target.x = lerp(pose.target.x, nearest.base.x, 0.55);
+      if (plan.shot === "low") pose.yaw *= 0.3;
+      if (nearest.base.y > 2) pose.target.y = lerp(pose.target.y, nearest.base.y, 0.25);
+    }
     this.poseFrom = previous && this.poseTo ? this.currentPose() : pose;
     this.poseTo = pose;
     this.camMoveStart = previous ? this.time : -Infinity;
     this.camDirection = direction;
 
     if (!this.running) this.renderFrame(0);
+    return [...new Set(items.flatMap((i) => [...i.tags]))];
+  }
+
+  /** A gentle hint: everything matching `tag` hops or wiggles, with a small sparkle. */
+  nudge(tag: string) {
+    for (const item of this.matching(tag)) {
+      item.reactStart = this.time;
+      this.spawnBurst(this.topOf(item), 12);
+    }
+  }
+
+  /** "You found it!" — a big sparkle fountain over everything matching `tag`. */
+  celebrate(tag: string) {
+    for (const item of this.matching(tag)) {
+      item.reactStart = this.time;
+      this.spawnBurst(this.topOf(item), 60);
+    }
+  }
+
+  private matching(tag: string): Item[] {
+    return this.current?.items.filter((i) => i.tags.has(tag) && i.holder.visible) ?? [];
+  }
+
+  private topOf(item: Item): THREE.Vector3 {
+    const box = new THREE.Box3().setFromObject(item.holder);
+    return new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y + 0.2, (box.min.z + box.max.z) / 2);
   }
 
   dispose() {
@@ -669,7 +719,7 @@ export class Stage {
   private addItem(
     root: THREE.Group,
     object: THREE.Object3D,
-    o: { kind: Item["kind"]; delay: number; x: number; y?: number; z: number; rotY?: number; scale?: number }
+    o: { kind: Item["kind"]; tag?: string; delay: number; x: number; y?: number; z: number; rotY?: number; scale?: number }
   ): Item {
     const actor = new THREE.Group();
     actor.add(object);
@@ -692,7 +742,12 @@ export class Stage {
       phase: Math.random() * Math.PI * 2,
       height: 1,
       reactStart: -Infinity,
+      ownTag: o.tag,
+      tags: new Set(o.tag ? [o.tag] : []),
     };
+    object.traverse((child) => {
+      if (typeof child.userData.tag === "string") item.tags.add(child.userData.tag);
+    });
     holder.userData.item = item;
     return item;
   }
@@ -1024,9 +1079,48 @@ export class Stage {
     this.handleTap(this.setPointerFromEvent(e));
   };
 
+  /**
+   * Tags of everything drawn within a finger's width of the tap. Little kids don't tap precisely,
+   * so "find it" counts a near miss.
+   */
+  private tagsNear(ndc: THREE.Vector2): string[] {
+    const world = this.current;
+    if (!world) return [];
+    const canvas = this.renderer.domElement;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const px = ((ndc.x + 1) / 2) * w;
+    const py = ((1 - ndc.y) / 2) * h;
+    const slack = Math.max(30, Math.min(w, h) * 0.08);
+    const tags = new Set<string>();
+    const box = new THREE.Box3();
+    const corner = new THREE.Vector3();
+    for (const item of world.items) {
+      if (item.kind === "ground" || !item.holder.visible || item.tags.size === 0) continue;
+      box.setFromObject(item.holder);
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let c = 0; c < 8; c++) {
+        corner.set(c & 1 ? box.max.x : box.min.x, c & 2 ? box.max.y : box.min.y, c & 4 ? box.max.z : box.min.z);
+        corner.project(this.camera);
+        if (corner.z > 1) continue; // behind the camera
+        const sx = ((corner.x + 1) / 2) * w;
+        const sy = ((1 - corner.y) / 2) * h;
+        minX = Math.min(minX, sx);
+        maxX = Math.max(maxX, sx);
+        minY = Math.min(minY, sy);
+        maxY = Math.max(maxY, sy);
+      }
+      if (px >= minX - slack && px <= maxX + slack && py >= minY - slack && py <= maxY + slack) {
+        item.tags.forEach((t) => tags.add(t));
+      }
+    }
+    return [...tags];
+  }
+
   private handleTap(ndc: THREE.Vector2) {
     const world = this.current;
     if (!world) return;
+    const near = this.tagsNear(ndc);
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObject(world.root, true);
     for (const hit of hits) {
@@ -1040,13 +1134,22 @@ export class Stage {
           ? item.holder.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, item.height * item.baseScale, 0))
           : hit.point.clone().add(new THREE.Vector3(0, 0.2, 0));
       this.spawnBurst(origin);
-      this.options.onTap?.(item.kind);
+      // The item's own tag (character or landmark kind), plus scenery tags on the tapped part's
+      // way up — so tapping a crystal at the cave's mouth counts as both "cave" and "crystal".
+      const tags = new Set(item.ownTag ? [item.ownTag] : []);
+      for (let o: THREE.Object3D | null = hit.object; o && o !== item.holder; o = o.parent) {
+        if (typeof o.userData.tag === "string") tags.add(o.userData.tag);
+      }
+      near.forEach((t) => tags.add(t));
+      this.options.onTap?.(item.kind, [...tags]);
       return;
     }
+    // Tapped the sky: nothing was hit, but something findable may be close by.
+    this.options.onTap?.("ground", near);
   }
 
-  private spawnBurst(origin: THREE.Vector3) {
-    const burst = new Burst(origin);
+  private spawnBurst(origin: THREE.Vector3, count = 32) {
+    const burst = new Burst(origin, count);
     this.bursts.push(burst);
     this.scene.add(burst.points);
   }
