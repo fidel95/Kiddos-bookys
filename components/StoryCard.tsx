@@ -18,10 +18,18 @@ export default function StoryCard({
   const cover = illustrationSrc(firstPage?.illustrationId ?? matchIllustration(firstPage?.sceneTags ?? []));
 
   return (
-    <div className="relative bg-white rounded-3xl shadow-md overflow-hidden border-4 border-amber-100 flex flex-col">
+    <div className="group relative bg-white rounded-3xl shadow-md overflow-hidden border-4 border-amber-100 flex flex-col animate-bounce-in transition-transform duration-300 hover:-translate-y-1 hover:-rotate-1 hover:shadow-xl">
       <Link href={`/story/${story.id}`} className="block">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={cover} alt="" className="w-full h-36 object-cover" />
+        <div className="relative overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={cover}
+            alt=""
+            className="w-full h-36 object-cover transition-transform duration-500 group-hover:scale-110"
+          />
+          {/* Book spine shading */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-black/20 to-transparent" />
+        </div>
         <div className="p-3">
           <p className="font-bold text-purple-900 leading-tight">{story.title.en}</p>
           <p className="text-sm text-purple-500">{story.title.es}</p>
